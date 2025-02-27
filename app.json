@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
+    "scheme": "restate",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -13,7 +13,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#ffffff"
       }
     },
@@ -28,10 +28,20 @@
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
-          "resizeMode": "contain",
+          "resizeMode": "cover",
+          "enableFullScreenImage_legacy": true,
           "backgroundColor": "#ffffff"
         }
+      ],
+      ["expo-font",
+        {"fonts" : [
+          "./assets/fonts/Rubik-Bold.ttf",
+          "./assets/fonts/Rubik-Regular.ttf",
+          "./assets/fonts/Rubik-Medium.ttf",
+          "./assets/fonts/Rubik-SemiBold.ttf",
+          "./assets/fonts/Rubik-Light.ttf",
+          "./assets/fonts/Rubik-ExtraBold.ttf"
+        ]}
       ]
     ],
     "experiments": {

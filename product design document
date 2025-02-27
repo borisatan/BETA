@@ -1,0 +1,251 @@
+Tech Stack Summary:
+Frontend: React Native (Expo)
+Backend: Firebase Firestore (real-time sync), SQLite (offline support)
+Authentication: Firebase Auth (Google & email sign-in)
+OCR: Google ML Kit or Tesseract.js    // STILL NOT SURE ABOUT THIS ONE
+Bank Syncing: Nordigen API
+Charts/Graphs: react-native-chart-kit or Victory Charts
+Security: Firestore rules, expo-secure-store
+Offline Mode: SQLite 
+
+
+1. Color Scheme
+- Light Mode:
+Elegant & Trustworthy (Banking Style)
+Background: #FFFFFF (White)
+Primary: #1E3A8A (Navy Blue)
+Accent: #F59E0B (Golden Amber)
+Text: #1F2937 (Dark Gray)
+Error: #B91C1C (Deep Red)
+
+- Dark Mode:
+Background: #0A0F1F (Deep Navy Black) 
+Primary: #1E40AF (Royal Blue)
+Accent: #FACC15 (Rich Gold) 
+Text: #E5E7EB (Light Gray) 
+Error: #EF4444 (Bright Crimson)
+
+
+
+2. Manual Transaction Logging
+How it Works:
+Users can manually enter transactions if they don’t have a receipt.
+Transactions include: Amount, Date, Category, Payment Method, Notes.
+Implementation Steps:
+Create a Transaction Form
+
+A simple form with input fields:
+Amount (numeric input)
+Date (date picker)
+Category (dropdown selection)
+Payment method (cash, credit, etc.)
+Notes (text field)
+Save Transaction Data
+
+Store transactions in Firebase Firestore (or a local SQLite database for offline support).
+
+3. Bank Syncing (Nordigen Integration)
+How it Works:
+Users connect their bank account to sync transactions automatically.
+The app fetches recent transactions and categorizes them.
+Implementation Steps:
+Use Nordigen API
+
+Register for Nordigen and get API credentials.
+Use the Nordigen API to allow users to securely connect their bank.
+Retrieve an access token to authenticate API requests.
+Fetch Transactions
+
+Fetch bank transactions using the Nordigen API.
+Convert raw bank transaction data into app format.
+Auto-Categorization
+
+Use transaction descriptions to match spending categories automatically.
+
+4. Multi-Device Syncing (Firebase Firestore)
+How it Works:
+Transactions are stored in Firebase Firestore, so users can access them across multiple devices.
+Implementation Steps:
+Set Up Firestore Database
+
+Use Firebase Authentication.
+Store transactions under each user’s unique ID in Firestore.
+Sync Data in Real Time
+
+Listen for changes in the database so the UI updates when new transactions are added.
+
+5. Reports & Insights (Charts & Graphs)
+How it Works:
+Users see visual summaries of their spending habits.
+Implementation Steps:
+Use Chart Libraries
+
+Use react-native-chart-kit or VictoryCharts to display graphs.
+Generate Insights
+
+Pie chart for category breakdown.
+Line chart for spending trends over time.
+Bar chart for income vs. expenses.
+
+6. Recurring Transactions & Bills
+How it Works:
+Users can set up recurring expenses like rent, subscriptions, and loans.
+Implementation Steps:
+Store Recurring Transactions in Firestore
+
+Use a flag (isRecurring: true) and store the next due date.
+Automate Transactions
+
+Use a background task (react-native-background-fetch) to add recurring transactions on their due date.
+7. User Authentication 
+Users can sign in with Google or email/password using Firebase Authentication.
+
+8. Privacy & Security
+How it Works:
+Data should be encrypted and protected.
+Implementation Steps:
+Secure User Data
+
+Use Firestore rules to restrict access (userId === auth.uid).
+Encrypt sensitive data with expo-secure-store.
+Biometric Login
+
+Use react-native-fingerprint-scanner for Face ID/Touch ID login.
+
+9. Offline Mode (SQLite or AsyncStorage)
+How it Works:
+Users should be able to add transactions offline, which sync when they reconnect.
+Implementation Steps:
+Store Transactions Locally
+
+Use SQLite (react-native-sqlite-storage) or AsyncStorage for temporary storage.
+Sync with Firebase When Online
+
+When the user reconnects, upload offline transactions to Firestore.
+
+10. Multi-Currency Support
+How it Works:
+Users can track expenses in different currencies, with automatic conversion.
+Implementation Steps:
+Allow Users to Select a Currency
+
+Add a setting to choose a primary currency.
+Convert Transactions Automatically
+
+Use an API like Open Exchange Rates or CurrencyLayer to fetch real-time exchange rates.
+Show Multi-Currency Reports
+
+Convert all transactions to the user’s primary currency for summary reports.
+
+
+
+10. Receipt Scanning (OCR & AI Categorization)
+How it Works:
+Users take a photo of a receipt.
+The app extracts text (OCR) from the receipt.
+Extracted text is analyzed to find key details (merchant name, total amount, date, and itemized purchases).
+AI categorizes the transaction based on patterns.
+The user reviews and confirms the transaction before adding it to their budget.
+Implementation Steps:
+Use a Library for OCR
+
+Use Google's ML Kit (react-native-camera + mlkit-ocr) or Tesseract.js to extract text from images.
+Example package: react-native-text-recognition.
+Extract Key Information from Text
+
+Write a function to scan the text and identify keywords such as:
+Merchant name (find the first line that doesn’t contain numbers).
+Date (look for patterns like MM/DD/YYYY or YYYY-MM-DD).
+Total price (typically follows “Total: $xx.xx”).
+Use AI for Categorization
+
+Use a basic machine learning model (TensorFlow.js) or OpenAI’s GPT API to match receipt items to spending categories (e.g., "Groceries", "Entertainment").
+Alternatively, use rule-based keyword mapping (e.g., if receipt mentions "Walmart", classify as "Groceries").
+User Confirmation
+
+Show a preview of the extracted details and allow the user to edit them before saving.
+
+
+
+Priorities:
+- Front Page (Base Page)
+
+📌 Page Overview
+The base page serves as the dashboard where users get an at-a-glance summary of their financial status. It should feature:
+✅ Balance Overview – Displays total balance and net savings.
+✅ Recent Transactions – Shows the latest spending and income.
+✅ Budget Status – Visual breakdown of expenses by category.
+✅ Quick Actions – Buttons for adding transactions, scanning receipts, or syncing with a bank.
+✅ Navigation Bar – Allows seamless switching between different sections (Dashboard, Transactions, Reports, Settings).
+
+📐 Layout Structure
+1️⃣ Header (Sticky & Minimal)
+Left Side: 🏦 App Logo
+Center: 📅 Current Month & Year (e.g., February 2025)
+Right Side: ⚙️ Profile Icon (Tapping opens user settings)
+📌 Design Style:
+
+Uses Primary Color (#1E3A8A Navy Blue in Light Mode / #1E40AF Royal Blue in Dark Mode).
+Font: Large, semi-bold text with small subtext for clarity.
+Icons: Clean, modern, and minimalist.
+2️⃣ Balance Overview (Prominent & Readable)
+💰 "Total Balance: $5,230.75" (Large, bold text)
+📈 "Savings This Month: +$320.50" (Smaller, green text to indicate growth)
+🏦 "Linked Bank Accounts: ✔️ Synced with Nordigen" (or a warning if unsynced)
+📌 Design Style:
+
+Dark Mode: White/Gray text on a deep navy background.
+Light Mode: Dark navy text on a white background.
+Uses a subtle shadow effect for a premium feel.
+3️⃣ Recent Transactions (Scrollable List)
+Displays the last 5-6 transactions with:
+
+🛒 Merchant Name (e.g., "Walmart")
+💵 Amount Spent (e.g., "-$52.75" in red for expenses, green for income)
+🏷️ Category (e.g., "Groceries")
+⏳ Date & Time (e.g., "Feb 24, 3:45 PM")
+📌 Design Style:
+
+Transactions are displayed in card format with soft shadows.
+Each transaction uses an icon (e.g., 🛒 for groceries, 🍽️ for restaurants, 🚗 for transport).
+Uses a swipe-to-delete gesture for easy transaction removal.
+4️⃣ Budget & Spending Insights (Graphs & Charts)
+Pie Chart: 🔵 Monthly Expenses Breakdown (e.g., 40% Rent, 20% Food, 15% Subscriptions, etc.)
+Bar Chart: 📊 Income vs. Expenses for the past 6 months
+Progress Bars: 📏 Budget vs. Actual Spending (e.g., "Food: $300/$400")
+📌 Design Style:
+
+Uses vibrant colors for distinction.
+Dark Mode Adjustments: Softer blues and golds instead of bright whites.
+Tap-to-expand feature for detailed insights.
+5️⃣ Quick Actions (Floating Button / Toolbar)
+🚀 FAB (Floating Action Button) – Positioned at the bottom right with a "+" icon.
+Tapping reveals:
+1️⃣ ➕ Add Transaction (Manual Entry)
+2️⃣ 📸 Scan Receipt (OCR for auto-logging)
+3️⃣ 🔄 Sync with Bank (Fetch latest transactions)
+
+📌 Design Style:
+
+Floating Button has Primary Color (#1E3A8A in Light Mode, #1E40AF in Dark Mode).
+Expanding menu uses soft animations for a premium feel.
+6️⃣ Bottom Navigation Bar (Persistent & Simple)
+🏠 Dashboard | 💳 Transactions | 📊 Reports | ⚙️ Settings
+
+📌 Design Style:
+
+Uses icon-based navigation for clarity.
+Active tab is highlighted in accent color (Golden Amber in Light Mode, Soft Gold in Dark Mode).
+Small, readable labels beneath icons.
+✨ Final Touches & UX Considerations
+✅ Dark & Light Mode Support – Automatic switching based on system preference.
+✅ Animations & Microinteractions – Soft transitions and hover effects for a smooth experience.
+✅ Accessibility Optimizations – Larger text sizes, high contrast, and screen reader support.
+
+🎯 Summary: Why This Works?
+Minimal, clutter-free layout → Enhances usability and focus.
+Strong visual hierarchy → Important data is instantly noticeable.
+Smooth animations & gestures → Feels modern and premium.
+Would you like me to draft a wireframe or write React Native code for this base page? 🚀
+
+Points 2, 5, 6 are for the base page.
