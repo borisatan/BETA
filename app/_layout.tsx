@@ -1,4 +1,5 @@
 import { SplashScreen, Stack } from "expo-router";
+import Toast from 'react-native-toast-message';
 import "./global.css"
 import { useFonts } from "expo-font";
 import { useEffect } from "react";
