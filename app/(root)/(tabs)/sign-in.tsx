@@ -8,6 +8,7 @@ import { auth } from "../firebase/firebaseConfig"; // Import Firebase config
 import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithCredential } from "firebase/auth";
 import * as Google from "expo-auth-session/providers/google"; // Ensure this is installed
 import { FirebaseError } from "firebase/app"; // Import FirebaseError
+import Toast from 'react-native-toast-message';
 
 const SignIn = () => {
   const [email, setEmail] = useState('');
@@ -30,22 +31,39 @@ const SignIn = () => {
 
   const handleEmailSignIn = async () => {
     if (!email.trim() || !password.trim()) {
-      Alert.alert("Error", "Email and password cannot be empty.");
+      Toast.show({type: 'error', text1: 'Error', text2: 'Email and password cannot be empty.'});
       return;
     }
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       console.log('User signed in:', userCredential.user);
+      Toast.show({type: 'success', text1: 'Welcome Back!', text2: 'Signed in successfully.'});
 
-      
-    } catch (error) {
+
+    } catch (error: any) {
       if (error instanceof FirebaseError) {
         console.error('Firebase Error:', error.code, error.message);
-        alert(error.message);
-      } else {
-        console.error('Unexpected error:', error);
-      }
+        let errorMessage = 'An error occurred. Please try again.';
+
+        switch (error.code) {
+          case 'auth/wrong-password':
+            errorMessage = 'Incorrect password.';
+            break;
+          case 'auth/invalid-credential':
+            errorMessage = 'Wrong email or password.';
+            break;
+          case 'auth/invalid-email':
+            errorMessage = 'Invalid email address.';
+            break;
+          default:
+            errorMessage = 'Something went wrong. Please try again.';
+            break;
+          }
+    Toast.show({ type: 'error', text1: 'Error', text2: errorMessage });}
+    else {
+    console.error('Unexpected Error: ', error);
     }
+  };
   };
 
   const handleGoogleSignIn = async (idToken: string) => {

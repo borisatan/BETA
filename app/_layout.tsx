@@ -25,5 +25,10 @@ const fontsLoaded = useFonts({
   }
 
 
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return (
+  <>
+    <Stack screenOptions={{ headerShown: false }} />
+    <Toast />
+  </>
+  )
 }
