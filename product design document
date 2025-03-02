@@ -168,14 +168,13 @@ Show a preview of the extracted details and allow the user to edit them before s
 
 
 Priorities:
-- Front Page (Base Page)
+# Front Page (Base Page)
 
 📌 Page Overview
 The base page serves as the dashboard where users get an at-a-glance summary of their financial status. It should feature:
 ✅ Balance Overview – Displays total balance and net savings.
 ✅ Recent Transactions – Shows the latest spending and income.
 ✅ Budget Status – Visual breakdown of expenses by category.
-✅ Quick Actions – Buttons for adding transactions, scanning receipts, or syncing with a bank.
 ✅ Navigation Bar – Allows seamless switching between different sections (Dashboard, Transactions, Reports, Settings).
 
 📐 Layout Structure
@@ -191,7 +190,6 @@ Icons: Clean, modern, and minimalist.
 2️⃣ Balance Overview (Prominent & Readable)
 💰 "Total Balance: $5,230.75" (Large, bold text)
 📈 "Savings This Month: +$320.50" (Smaller, green text to indicate growth)
-🏦 "Linked Bank Accounts: ✔️ Synced with Nordigen" (or a warning if unsynced)
 📌 Design Style:
 
 Dark Mode: White/Gray text on a deep navy background.
@@ -209,28 +207,21 @@ Displays the last 5-6 transactions with:
 Transactions are displayed in card format with soft shadows.
 Each transaction uses an icon (e.g., 🛒 for groceries, 🍽️ for restaurants, 🚗 for transport).
 Uses a swipe-to-delete gesture for easy transaction removal.
-4️⃣ Budget & Spending Insights (Graphs & Charts)
-Pie Chart: 🔵 Monthly Expenses Breakdown (e.g., 40% Rent, 20% Food, 15% Subscriptions, etc.)
-Bar Chart: 📊 Income vs. Expenses for the past 6 months
-Progress Bars: 📏 Budget vs. Actual Spending (e.g., "Food: $300/$400")
-📌 Design Style:
 
-Uses vibrant colors for distinction.
-Dark Mode Adjustments: Softer blues and golds instead of bright whites.
-Tap-to-expand feature for detailed insights.
 5️⃣ Quick Actions (Floating Button / Toolbar)
 🚀 FAB (Floating Action Button) – Positioned at the bottom right with a "+" icon.
 Tapping reveals:
 1️⃣ ➕ Add Transaction (Manual Entry)
 2️⃣ 📸 Scan Receipt (OCR for auto-logging)
-3️⃣ 🔄 Sync with Bank (Fetch latest transactions)
 
 📌 Design Style:
 
 Floating Button has Primary Color (#1E3A8A in Light Mode, #1E40AF in Dark Mode).
 Expanding menu uses soft animations for a premium feel.
+
+
 6️⃣ Bottom Navigation Bar (Persistent & Simple)
-🏠 Dashboard | 💳 Transactions | 📊 Reports | ⚙️ Settings
+🏠 Dashboard | 💳 Transactions and Accounts | 📊 Reports | ⚙️ Settings
 
 📌 Design Style:
 
@@ -242,10 +233,18 @@ Small, readable labels beneath icons.
 ✅ Animations & Microinteractions – Soft transitions and hover effects for a smooth experience.
 ✅ Accessibility Optimizations – Larger text sizes, high contrast, and screen reader support.
 
-🎯 Summary: Why This Works?
-Minimal, clutter-free layout → Enhances usability and focus.
-Strong visual hierarchy → Important data is instantly noticeable.
-Smooth animations & gestures → Feels modern and premium.
-Would you like me to draft a wireframe or write React Native code for this base page? 🚀
+
+# Quick Actions – Buttons for adding transactions, scanning receipts, or syncing with a bank.
+
+# Budget & Spending Insights (Graphs & Charts)
+Pie Chart: 🔵 Monthly Expenses Breakdown (e.g., 40% Rent, 20% Food, 15% Subscriptions, etc.)
+Bar Chart: 📊 Income vs. Expenses for the past 6 months
+Progress Bars: 📏 Budget vs. Actual Spending (e.g., "Food: $300/$400")
+📌 Design Style:
+
+Uses vibrant colors for distinction.
+Dark Mode Adjustments: Softer blues and golds instead of bright whites.
+Tap-to-expand feature for detailed insights.
+
 
 Points 2, 5, 6 are for the base page.
