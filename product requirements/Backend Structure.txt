@@ -1,0 +1,69 @@
+1. Accounts
+This table will store the information about different accounts (e.g., Revolut, Cash, Debit Card).
+
+Fields:
+id (Primary Key) - Unique identifier for each account
+name (string) - Name of the account (e.g., "Revolut", "Cash", "Debit Card")
+balance (float) - The current balance of the account
+type (string) - The type of account (e.g., "Checking", "Savings", "Cash", "Card")
+currency (string) - Currency for the account (e.g., "USD", "EUR")
+created_at (datetime) - When the account was created
+updated_at (datetime) - When the account was last updated
+2. Income
+This table will store information related to the income that is assigned to specific accounts.
+
+Fields:
+id (Primary Key) - Unique identifier for each income entry
+amount (float) - The amount of income
+source (string) - Source of the income (e.g., "Salary", "Freelance", "Gift")
+date_received (datetime) - Date and time when the income was received
+account_id (Foreign Key) - Reference to the account where the income is assigned (linked to Accounts)
+created_at (datetime) - When the income was logged
+updated_at (datetime) - When the income entry was last updated
+3. Transactions
+This table will store the transaction logs, including expenses, transfers, and income. Each transaction is linked to an account and may involve an expense category.
+
+Fields:
+id (Primary Key) - Unique identifier for each transaction
+amount (float) - Amount of money spent or transferred (negative for expenses, positive for income/transfer)
+date (datetime) - Date of the transaction
+description (string) - A short description of the transaction (e.g., "Grocery Shopping", "Gas station")
+account_id (Foreign Key) - The account from which the money is taken (linked to Accounts)
+category_id (Foreign Key) - The category to which the transaction belongs (linked to Categories)
+subcategory_id (Foreign Key) - The subcategory within the category (linked to Subcategories)
+transaction_type (string) - Type of transaction: 'expense', 'income', 'transfer'
+created_at (datetime) - When the transaction was logged
+updated_at (datetime) - When the transaction entry was last updated
+4. Categories
+Categories will define the higher-level grouping for expenses (e.g., Needs, Wants, Other).
+
+Fields:
+id (Primary Key) - Unique identifier for each category
+name (string) - Name of the category (e.g., "Needs", "Wants", "Other")
+description (string) - A description of the category
+created_at (datetime) - When the category was created
+updated_at (datetime) - When the category was last updated
+5. Subcategories
+Subcategories are used to further break down transactions into more specific types (e.g., "Utilities" under "Needs", "Rent" under "Needs", "Car" under "Needs").
+
+Fields:
+id (Primary Key) - Unique identifier for each subcategory
+name (string) - Name of the subcategory (e.g., "Utilities", "Rent", "Car")
+category_id (Foreign Key) - The category this subcategory belongs to (linked to Categories)
+created_at (datetime) - When the subcategory was created
+updated_at (datetime) - When the subcategory was last updated
+Database Relationships
+Here are the main relationships between the tables:
+
+Accounts ↔ Income:
+
+Each income is linked to a specific account through the account_id.
+Accounts ↔ Transactions:
+
+Each transaction is linked to an account through the account_id.
+Categories ↔ Subcategories:
+
+Each category can have multiple subcategories. A category has many subcategories, but a subcategory is only linked to one category.
+Transactions ↔ Categories ↔ Subcategories:
+
+Each transaction is categorized into a category and a subcategory through the category_id and subcategory_id.

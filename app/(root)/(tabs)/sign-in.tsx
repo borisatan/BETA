@@ -1,53 +1,30 @@
 import { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, Image, Alert, useColorScheme } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, Image, Alert } from 'react-native';
 import icons from '@constants/icons';
 import { Link } from 'expo-router';
-
 import Constants from 'expo-constants';
-import { auth } from "../firebase/firebaseConfig"; // Import Firebase config
+import { auth } from "../firebase/firebaseConfig";
 import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithCredential } from "firebase/auth";
-import * as Google from "expo-auth-session/providers/google"; // Ensure this is installed
-import { FirebaseError } from "firebase/app"; // Import FirebaseError
+import * as Google from "expo-auth-session/providers/google";
+import { FirebaseError } from "firebase/app";
 import Toast from 'react-native-toast-message';
+import { useTheme } from '../context/ThemeContext';
 
 const SignIn = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [googleUser, setGoogleUser] = useState<any>(); // No clue
-  
-  // Theme state
-  const systemColorScheme = useColorScheme();
-  const [themePreference, setThemePreference] = useState('system');
-  const [isDarkMode, setIsDarkMode] = useState(systemColorScheme === 'dark');
-  
-  // Update theme based on preference
-  useEffect(() => {
-    if (themePreference === 'system') {
-      setIsDarkMode(systemColorScheme === 'dark');
-    }
-  }, [systemColorScheme, themePreference]);
-  
-  // Handle theme toggle
-  const handleThemeToggle = (value: string) => {
-    setThemePreference(value);
-    if (value === 'light') {
-      setIsDarkMode(false);
-    } else if (value === 'dark') {
-      setIsDarkMode(true);
-    } else {
-      setIsDarkMode(systemColorScheme === 'dark');
-    }
-  };
+  const [googleUser, setGoogleUser] = useState<any>();
+  const { isDarkMode } = useTheme();
 
   // Google Sign-In - Setup
   const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
-    clientId: Constants.expoConfig?.extra?.googleClientId, // Use client ID from app.config.js
+    clientId: Constants.expoConfig?.extra?.googleClientId,
   });
 
   useEffect(() => {
     if (response?.type === 'success') {
       const { id_token } = response.params;
-      handleGoogleSignIn(id_token); // Handle the sign-in with the id_token from Google
+      handleGoogleSignIn(id_token);
     }
   }, [response]);
 
@@ -60,8 +37,6 @@ const SignIn = () => {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       console.log('User signed in:', userCredential.user);
       Toast.show({type: 'success', text1: 'Welcome Back!', text2: 'Signed in successfully.'});
-
-
     } catch (error: any) {
       if (error instanceof FirebaseError) {
         console.error('Firebase Error:', error.code, error.message);
@@ -80,20 +55,20 @@ const SignIn = () => {
           default:
             errorMessage = 'Something went wrong. Please try again.';
             break;
-          }
-    Toast.show({ type: 'error', text1: 'Error', text2: errorMessage });}
-    else {
-    console.error('Unexpected Error: ', error);
+        }
+        Toast.show({ type: 'error', text1: 'Error', text2: errorMessage });
+      } else {
+        console.error('Unexpected Error: ', error);
+      }
     }
-  };
   };
 
   const handleGoogleSignIn = async (idToken: string) => {
     try {
       const googleCredential = GoogleAuthProvider.credential(idToken);
-      const userCredential = await signInWithCredential(auth, googleCredential); // Firebase sign in with Google credential
+      const userCredential = await signInWithCredential(auth, googleCredential);
       console.log('Google Sign-In successful:', userCredential.user);
-      setGoogleUser(userCredential.user); // Optionally store the user data
+      setGoogleUser(userCredential.user);
     } catch (error) {
       console.error('Google Sign-In error:', error);
       alert('Something went wrong with Google Sign-In.');
@@ -108,41 +83,6 @@ const SignIn = () => {
         <View className="items-center mb-8">
           <Text className={`text-2xl font-bold ${isDarkMode ? "text-gray-200" : "text-gray-900"}`}>Welcome back!</Text>
           <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}>Please sign in to your account</Text>
-        </View>
-
-        {/* Theme Toggle */}
-        <View className="mb-6 p-4 rounded-lg border border-gray-300 dark:border-gray-700">
-          <Text className={`text-sm font-medium mb-2 ${isDarkMode ? "text-gray-300" : "text-gray-800"}`}>
-            Theme Preference
-          </Text>
-          <View className="flex-row justify-between items-center">
-            <TouchableOpacity 
-              onPress={() => handleThemeToggle('light')}
-              className={`px-3 py-2 rounded-lg ${themePreference === 'light' ? 'bg-blue-900 dark:bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'}`}
-            >
-              <Text className={themePreference === 'light' ? 'text-white' : isDarkMode ? 'text-gray-300' : 'text-gray-800'}>
-                Light
-              </Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              onPress={() => handleThemeToggle('system')}
-              className={`px-3 py-2 rounded-lg ${themePreference === 'system' ? 'bg-blue-900 dark:bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'}`}
-            >
-              <Text className={themePreference === 'system' ? 'text-white' : isDarkMode ? 'text-gray-300' : 'text-gray-800'}>
-                System
-              </Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              onPress={() => handleThemeToggle('dark')}
-              className={`px-3 py-2 rounded-lg ${themePreference === 'dark' ? 'bg-blue-900 dark:bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'}`}
-            >
-              <Text className={themePreference === 'dark' ? 'text-white' : isDarkMode ? 'text-gray-300' : 'text-gray-800'}>
-                Dark
-              </Text>
-            </TouchableOpacity>
-          </View>
         </View>
 
         {/* Sign In Form */}

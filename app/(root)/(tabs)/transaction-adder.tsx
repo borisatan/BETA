@@ -1,119 +1,111 @@
-import { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, useColorScheme, Platform, Switch} from 'react-native';
-import { Picker } from '@react-native-picker/picker';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, Platform } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Toast from 'react-native-toast-message';
-import { db, auth } from '../firebase/firebaseConfig';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { Appearance } from 'react-native';
-
-// Transaction interface
-interface Transaction {
-  amount: number;
-  date: Date;
-  category: string;
-  paymentMethod: string;
-  notes: string;
-  userId: string;
-  createdAt: any;
-}
+import { TransactionService } from '../services/transactionService';
+import { AccountService } from '../services/accountService';
+import { useTheme } from '../context/ThemeContext';
+import { Transaction, Account } from '../firebase/types';
+import { auth } from '../firebase/firebaseConfig';
+import { Timestamp } from 'firebase/firestore';
 
 const TransactionAdder = () => {
-  // Form state
+  const { isDarkMode } = useTheme();
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(new Date());
-  const [category, setCategory] = useState('Groceries');
-  const [paymentMethod, setPaymentMethod] = useState('Cash');
+  const [category, setCategory] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('');
   const [notes, setNotes] = useState('');
-  
-  // Date picker state
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [selectedAccount, setSelectedAccount] = useState<string>('');
   const [showDatePicker, setShowDatePicker] = useState(false);
-  
-  // Theme state
-  const systemColorScheme = useColorScheme();
-  const [themePreference, setThemePreference] = useState('system');
-  const [isDarkMode, setIsDarkMode] = useState(systemColorScheme === 'dark');
-  
-  // Update theme based on preference
+  const [showTransactionTypePicker, setShowTransactionTypePicker] = useState(false);
+  const [showAccountPicker, setShowAccountPicker] = useState(false);
+  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+  const [showPaymentMethodPicker, setShowPaymentMethodPicker] = useState(false);
+  const [transactionType, setTransactionType] = useState<'income' | 'expense'>('expense');
+
+  // Function to close all pickers
+  const closeAllPickers = () => {
+    setShowDatePicker(false);
+    setShowTransactionTypePicker(false);
+    setShowAccountPicker(false);
+    setShowCategoryPicker(false);
+    setShowPaymentMethodPicker(false);
+  };
+
+  // Function to handle text input focus
+  const handleInputFocus = () => {
+    closeAllPickers();
+  };
+
+  // Function to handle notes text change with limits
+  const handleNotesChange = (text: string) => {
+    // Count the number of newlines
+    const newlineCount = (text.match(/\n/g) || []).length;
+    // Only update if within character limit and line limit
+    if (text.length <= 200 && newlineCount < 10) {
+      setNotes(text);
+    }
+  };
+
   useEffect(() => {
-    if (themePreference === 'system') {
-      setIsDarkMode(systemColorScheme === 'dark');
-    }
-  }, [systemColorScheme, themePreference]);
-  
-  // Categories and payment methods
-  const categories = [
-    'Groceries', 'Dining', 'Transportation', 'Entertainment', 
-    'Shopping', 'Utilities', 'Housing', 'Healthcare', 'Education', 
-    'Personal Care', 'Travel', 'Gifts', 'Investments', 'Income', 'Other'
-  ];
-  
-  const paymentMethods = [
-    'Cash', 'Credit Card', 'Debit Card', 'Bank Transfer', 
-    'Mobile Payment', 'Check', 'Other'
-  ];
+    fetchAccounts();
+  }, []);
 
-  // Handle date change
-  const onDateChange = (event: any, selectedDate?: Date) => {
-    const currentDate = selectedDate || date;
-    setShowDatePicker(Platform.OS === 'ios');
-    setDate(currentDate);
-  };
-
-  // Handle theme toggle
-  const handleThemeToggle = (value: string) => {
-    setThemePreference(value);
-    if (value === 'light') {
-      setIsDarkMode(false);
-    } else if (value === 'dark') {
-      setIsDarkMode(true);
-    } else {
-      setIsDarkMode(systemColorScheme === 'dark');
-    }
-  };
-
-  // Handle form submission
-  const handleSubmit = async () => {
-    // Validate form
-    if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+  const fetchAccounts = async () => {
+    try {
+      const userId = auth.currentUser?.uid;
+      if (!userId) {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'You must be logged in to fetch accounts'
+        });
+        return;
+      }
+      const userAccounts = await AccountService.getUserAccounts(userId);
+      setAccounts(userAccounts);
+      if (userAccounts.length > 0) {
+        setSelectedAccount(userAccounts[0].id);
+      }
+    } catch (error) {
+      console.error('Error fetching accounts:', error);
       Toast.show({
         type: 'error',
         text1: 'Error',
-        text2: 'Please enter a valid amount'
+        text2: 'Failed to fetch accounts'
+      });
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!amount || !selectedAccount || !category || !paymentMethod) {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Please fill in all required fields'
       });
       return;
     }
 
     try {
-      const user = auth.currentUser;
-      
-      if (!user) {
-        Toast.show({
-          type: 'error',
-          text1: 'Error',
-          text2: 'You must be logged in to add transactions'
-        });
-        return;
-      }
-
-      // Create transaction object
-      const transaction: Transaction = {
+      const transaction: Omit<Transaction, 'id'> = {
+        userId: auth.currentUser?.uid || '',
         amount: parseFloat(amount),
-        date,
-        category,
+        date: Timestamp.fromDate(new Date(date)),
+        description: notes,
+        accountId: selectedAccount,
+        categoryId: category,
+        subcategoryId: '',
         paymentMethod,
-        notes,
-        userId: user.uid,
-        createdAt: serverTimestamp()
+        notes: '',
+        transactionType,
+        createdAt: Timestamp.fromDate(new Date()),
+        updatedAt: Timestamp.fromDate(new Date())
       };
 
-      // Add to Firestore
-      // This is where the backend integration would happen
-      // For now, we'll just show a success message
-      
-      // Simulating a successful transaction add
-      console.log('Transaction to add:', transaction);
-      
+      await TransactionService.createTransaction(transaction);
       Toast.show({
         type: 'success',
         text1: 'Success',
@@ -123,10 +115,10 @@ const TransactionAdder = () => {
       // Reset form
       setAmount('');
       setDate(new Date());
-      setCategory('Groceries');
-      setPaymentMethod('Cash');
+      setCategory('');
+      setPaymentMethod('');
       setNotes('');
-      
+      setTransactionType('expense');
     } catch (error) {
       console.error('Error adding transaction:', error);
       Toast.show({
@@ -137,42 +129,10 @@ const TransactionAdder = () => {
     }
   };
 
-  // Backend implementation idea:
-  /*
-    To implement the backend logic for transaction adding:
-    
-    1. Create a transactions collection in Firestore
-    2. Use the following code to add a transaction:
-    
-    const addTransaction = async (transaction: Transaction) => {
-      try {
-        const docRef = await addDoc(collection(db, "transactions"), transaction);
-        console.log("Transaction added with ID: ", docRef.id);
-        return docRef.id;
-      } catch (error) {
-        console.error("Error adding transaction: ", error);
-        throw error;
-      }
-    };
-    
-    3. Add offline support using SQLite:
-    - Store transactions locally when offline
-    - Sync with Firestore when back online
-    - Use a queue system to handle pending uploads
-    
-    4. Add transaction categorization:
-    - Use keywords in notes to suggest categories
-    - Learn from user's categorization patterns
-    
-    5. Add recurring transactions:
-    - Add a "recurring" flag and frequency to the transaction object
-    - Use a background task to add recurring transactions on schedule
-  */
-
   return (
     <ScrollView 
-      contentContainerStyle={{ flexGrow: 1, padding: 20 }}
-      className={isDarkMode ? "bg-[#0A0F1F]" : "bg-white"}
+      className={`flex-1 ${isDarkMode ? "bg-[#0A0F1F]" : "bg-white"}`}
+      contentContainerStyle={{ padding: 20 }}
     >
       <View className="w-full max-w-md mx-auto">
         {/* Header */}
@@ -181,180 +141,341 @@ const TransactionAdder = () => {
             Add Transaction
           </Text>
           <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}>
-            Track your spending and income
+            Record your income or expenses
           </Text>
         </View>
 
-        {/* Theme Toggle */}
-        <View className="mb-6 p-4 rounded-lg border border-gray-300 dark:border-gray-700">
+        {/* Transaction Type */}
+        <View className="mb-4">
           <Text className={`text-sm font-medium mb-2 ${isDarkMode ? "text-gray-300" : "text-gray-800"}`}>
-            Theme Preference
+            Transaction Type
           </Text>
-          <View className="flex-row justify-between items-center">
-            <TouchableOpacity 
-              onPress={() => handleThemeToggle('light')}
-              className={`px-3 py-2 rounded-lg ${themePreference === 'light' ? 'bg-blue-900 dark:bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'}`}
-            >
-              <Text className={themePreference === 'light' ? 'text-white' : isDarkMode ? 'text-gray-300' : 'text-gray-800'}>
-                Light
-              </Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              onPress={() => handleThemeToggle('system')}
-              className={`px-3 py-2 rounded-lg ${themePreference === 'system' ? 'bg-blue-900 dark:bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'}`}
-            >
-              <Text className={themePreference === 'system' ? 'text-white' : isDarkMode ? 'text-gray-300' : 'text-gray-800'}>
-                System
-              </Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              onPress={() => handleThemeToggle('dark')}
-              className={`px-3 py-2 rounded-lg ${themePreference === 'dark' ? 'bg-blue-900 dark:bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'}`}
-            >
-              <Text className={themePreference === 'dark' ? 'text-white' : isDarkMode ? 'text-gray-300' : 'text-gray-800'}>
-                Dark
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Transaction Form */}
-        <View className="gap-y-4">
-          {/* Amount */}
-          <View>
-            <Text className={`text-sm font-medium mb-1 ${isDarkMode ? "text-gray-300" : "text-gray-800"}`}>
-              Amount
-            </Text>
-            <TextInput
-              className={`w-full h-12 border rounded-lg px-4 ${
-                isDarkMode 
-                  ? "border-gray-600 text-gray-200 bg-gray-800" 
-                  : "border-gray-300 text-gray-900 bg-white"
-              }`}
-              placeholder="0.00"
-              placeholderTextColor={isDarkMode ? "#9CA3AF" : "#6B7280"}
-              value={amount}
-              onChangeText={setAmount}
-              keyboardType="numeric"
-            />
-          </View>
-
-          {/* Date */}
-          <View>
-            <Text className={`text-sm font-medium mb-1 ${isDarkMode ? "text-gray-300" : "text-gray-800"}`}>
-              Date
-            </Text>
-            <TouchableOpacity 
-              onPress={() => setShowDatePicker(true)}
-              className={`w-full h-12 border rounded-lg px-4 flex-row items-center justify-between ${
-                isDarkMode 
-                  ? "border-gray-600 bg-gray-800" 
-                  : "border-gray-300 bg-white"
-              }`}
-            >
-              <Text className={isDarkMode ? "text-gray-200" : "text-gray-900"}>
-                {date.toLocaleDateString()}
-              </Text>
-              <Text className={isDarkMode ? "text-gray-400" : "text-gray-600"}>
-                📅
-              </Text>
-            </TouchableOpacity>
-            {showDatePicker && (
-              <DateTimePicker
-                value={date}
-                mode="date"
-                display="default"
-                onChange={onDateChange}
-              />
-            )}
-          </View>
-
-          {/* Category */}
-          <View>
-            <Text className={`text-sm font-medium mb-1 ${isDarkMode ? "text-gray-300" : "text-gray-800"}`}>
-              Category
-            </Text>
-            <View className={`border rounded-lg overflow-hidden ${
-              isDarkMode 
-                ? "border-gray-600 bg-gray-800" 
-                : "border-gray-300 bg-white"
-            }`}>
-              <Picker
-                selectedValue={category}
-                onValueChange={(itemValue : any) => setCategory(itemValue)}
-                style={{ 
-                  color: isDarkMode ? '#E5E7EB' : '#1F2937',
-                  height: 50
-                }}
-                dropdownIconColor={isDarkMode ? '#E5E7EB' : '#1F2937'}
-              >
-                {categories.map((cat) => (
-                  <Picker.Item key={cat} label={cat} value={cat} />
-                ))}
-              </Picker>
-            </View>
-          </View>
-
-          {/* Payment Method */}
-          <View>
-            <Text className={`text-sm font-medium mb-1 ${isDarkMode ? "text-gray-300" : "text-gray-800"}`}>
-              Payment Method
-            </Text>
-            <View className={`border rounded-lg overflow-hidden ${
-              isDarkMode 
-                ? "border-gray-600 bg-gray-800" 
-                : "border-gray-300 bg-white"
-            }`}>
-              <Picker
-                selectedValue={paymentMethod}
-                onValueChange={(itemValue : any) => setPaymentMethod(itemValue)}
-                style={{ 
-                  color: isDarkMode ? '#E5E7EB' : '#1F2937',
-                  height: 50
-                }}
-                dropdownIconColor={isDarkMode ? '#E5E7EB' : '#1F2937'}
-              >
-                {paymentMethods.map((method) => (
-                  <Picker.Item key={method} label={method} value={method} />
-                ))}
-              </Picker>
-            </View>
-          </View>
-
-          {/* Notes */}
-          <View>
-            <Text className={`text-sm font-medium mb-1 ${isDarkMode ? "text-gray-300" : "text-gray-800"}`}>
-              Notes (Optional)
-            </Text>
-            <TextInput
-              className={`w-full h-24 border rounded-lg px-4 py-2 ${
-                isDarkMode 
-                  ? "border-gray-600 text-gray-200 bg-gray-800" 
-                  : "border-gray-300 text-gray-900 bg-white"
-              }`}
-              placeholder="Add notes about this transaction..."
-              placeholderTextColor={isDarkMode ? "#9CA3AF" : "#6B7280"}
-              value={notes}
-              onChangeText={setNotes}
-              multiline
-              textAlignVertical="top"
-            />
-          </View>
-
-          {/* Submit Button */}
           <TouchableOpacity 
-            className={`mt-4 p-4 rounded-lg items-center ${
-              isDarkMode ? "bg-blue-600" : "bg-blue-900"
+            onPress={() => {
+              setShowTransactionTypePicker(true);
+              setShowAccountPicker(false);
+              setShowCategoryPicker(false);
+              setShowPaymentMethodPicker(false);
+            }}
+            className={`p-3 rounded-lg border ${
+              isDarkMode ? "border-gray-700 bg-gray-800" : "border-gray-300 bg-white"
             }`}
-            onPress={handleSubmit}
           >
-            <Text className="text-white text-base font-semibold">
-              Add Transaction
+            <Text className={isDarkMode ? "text-gray-200" : "text-gray-900"}>
+              {transactionType === 'income' ? 'Income' : 'Expense'}
             </Text>
           </TouchableOpacity>
+          {showTransactionTypePicker && (
+            <View className={`absolute z-10 w-full mt-1 rounded-lg border ${
+              isDarkMode ? "border-gray-700 bg-gray-800" : "border-gray-300 bg-white"
+            }`}>
+              <TouchableOpacity 
+                onPress={() => {
+                  setTransactionType('income');
+                  setShowTransactionTypePicker(false);
+                }}
+                className={`p-3 border-b ${
+                  isDarkMode ? "border-gray-700" : "border-gray-300"
+                }`}
+              >
+                <Text className={isDarkMode ? "text-gray-200" : "text-gray-900"}>Income</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                onPress={() => {
+                  setTransactionType('expense');
+                  setShowTransactionTypePicker(false);
+                }}
+                className="p-3"
+              >
+                <Text className={isDarkMode ? "text-gray-200" : "text-gray-900"}>Expense</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
+
+        {/* Amount */}
+        <View className="mb-4">
+          <Text className={`text-sm font-medium mb-2 ${isDarkMode ? "text-gray-300" : "text-gray-800"}`}>
+            Amount
+          </Text>
+          <TextInput
+            value={amount}
+            onChangeText={setAmount}
+            placeholder="Enter amount"
+            keyboardType="numeric"
+            onFocus={handleInputFocus}
+            className={`p-3 rounded-lg border ${
+              isDarkMode ? "border-gray-700 bg-gray-800 text-gray-200" : "border-gray-300 bg-white text-gray-900"
+            }`}
+          />
+        </View>
+
+        {/* Date */}
+        <View className="mb-4">
+          <Text className={`text-sm font-medium mb-2 ${isDarkMode ? "text-gray-300" : "text-gray-800"}`}>
+            Date
+          </Text>
+          <TouchableOpacity 
+            onPress={() => {
+              closeAllPickers();
+              setShowDatePicker(true);
+            }}
+            className={`p-3 rounded-lg border ${
+              isDarkMode ? "border-gray-700 bg-gray-800" : "border-gray-300 bg-white"
+            }`}
+          >
+            <Text className={isDarkMode ? "text-gray-200" : "text-gray-900"}>
+              {date.toLocaleDateString()}
+            </Text>
+          </TouchableOpacity>
+          {showDatePicker && (
+            <DateTimePicker
+              value={date}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              onChange={(event, selectedDate) => {
+                setShowDatePicker(false);
+                if (selectedDate) {
+                  setDate(selectedDate);
+                }
+              }}
+            />
+          )}
+        </View>
+
+        {/* Account Selection */}
+        <View className="mb-4">
+          <Text className={`text-sm font-medium mb-2 ${isDarkMode ? "text-gray-300" : "text-gray-800"}`}>
+            Account
+          </Text>
+          <TouchableOpacity 
+            onPress={() => {
+              if (accounts.length === 0) {
+                Toast.show({
+                  type: 'error',
+                  text1: 'Error',
+                  text2: 'No accounts available. Please add an account first.'
+                });
+                return;
+              }
+              closeAllPickers();
+              setShowAccountPicker(true);
+            }}
+            className={`p-3 rounded-lg border ${
+              isDarkMode ? "border-gray-700 bg-gray-800" : "border-gray-300 bg-white"
+            }`}
+          >
+            <Text className={isDarkMode ? "text-gray-200" : "text-gray-900"}>
+              {accounts.find(acc => acc.id === selectedAccount)?.name || 'Select Account'}
+            </Text>
+          </TouchableOpacity>
+          {showAccountPicker && (
+            <View className={`absolute z-10 w-full mt-1 rounded-lg border max-h-48 ${
+              isDarkMode ? "border-gray-700 bg-gray-800" : "border-gray-300 bg-white"
+            }`}>
+              <ScrollView>
+                {accounts.map(account => (
+                  <TouchableOpacity 
+                    key={account.id}
+                    onPress={() => {
+                      setSelectedAccount(account.id);
+                      setShowAccountPicker(false);
+                    }}
+                    className={`p-3 border-b ${
+                      isDarkMode ? "border-gray-700" : "border-gray-300"
+                    }`}
+                  >
+                    <Text className={isDarkMode ? "text-gray-200" : "text-gray-900"}>
+                      {account.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+        </View>
+
+        {/* Category */}
+        <View className="mb-4">
+          <Text className={`text-sm font-medium mb-2 ${isDarkMode ? "text-gray-300" : "text-gray-800"}`}>
+            Category
+          </Text>
+          <TouchableOpacity 
+            onPress={() => {
+              closeAllPickers();
+              setShowCategoryPicker(true);
+            }}
+            className={`p-3 rounded-lg border ${
+              isDarkMode ? "border-gray-700 bg-gray-800" : "border-gray-300 bg-white"
+            }`}
+          >
+            <Text className={isDarkMode ? "text-gray-200" : "text-gray-900"}>
+              {category || 'Select Category'}
+            </Text>
+          </TouchableOpacity>
+          {showCategoryPicker && (
+            <View className={`absolute z-10 w-full mt-1 rounded-lg border max-h-48 ${
+              isDarkMode ? "border-gray-700 bg-gray-800" : "border-gray-300 bg-white"
+            }`}>
+              <ScrollView>
+                <TouchableOpacity 
+                  onPress={() => {
+                    setCategory('Food & Dining');
+                    setShowCategoryPicker(false);
+                  }}
+                  className={`p-3 border-b ${
+                    isDarkMode ? "border-gray-700" : "border-gray-300"
+                  }`}
+                >
+                  <Text className={isDarkMode ? "text-gray-200" : "text-gray-900"}>Food & Dining</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  onPress={() => {
+                    setCategory('Transportation');
+                    setShowCategoryPicker(false);
+                  }}
+                  className={`p-3 border-b ${
+                    isDarkMode ? "border-gray-700" : "border-gray-300"
+                  }`}
+                >
+                  <Text className={isDarkMode ? "text-gray-200" : "text-gray-900"}>Transportation</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  onPress={() => {
+                    setCategory('Shopping');
+                    setShowCategoryPicker(false);
+                  }}
+                  className={`p-3 border-b ${
+                    isDarkMode ? "border-gray-700" : "border-gray-300"
+                  }`}
+                >
+                  <Text className={isDarkMode ? "text-gray-200" : "text-gray-900"}>Shopping</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  onPress={() => {
+                    setCategory('Bills & Utilities');
+                    setShowCategoryPicker(false);
+                  }}
+                  className={`p-3 border-b ${
+                    isDarkMode ? "border-gray-700" : "border-gray-300"
+                  }`}
+                >
+                  <Text className={isDarkMode ? "text-gray-200" : "text-gray-900"}>Bills & Utilities</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  onPress={() => {
+                    setCategory('Entertainment');
+                    setShowCategoryPicker(false);
+                  }}
+                  className="p-3"
+                >
+                  <Text className={isDarkMode ? "text-gray-200" : "text-gray-900"}>Entertainment</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            </View>
+          )}
+        </View>
+
+        {/* Payment Method */}
+        <View className="mb-4">
+          <Text className={`text-sm font-medium mb-2 ${isDarkMode ? "text-gray-300" : "text-gray-800"}`}>
+            Payment Method
+          </Text>
+          <TouchableOpacity 
+            onPress={() => {
+              closeAllPickers();
+              setShowPaymentMethodPicker(true);
+            }}
+            className={`p-3 rounded-lg border ${
+              isDarkMode ? "border-gray-700 bg-gray-800" : "border-gray-300 bg-white"
+            }`}
+          >
+            <Text className={isDarkMode ? "text-gray-200" : "text-gray-900"}>
+              {paymentMethod || 'Select Payment Method'}
+            </Text>
+          </TouchableOpacity>
+          {showPaymentMethodPicker && (
+            <View className={`absolute z-10 w-full mt-1 rounded-lg border max-h-48 ${
+              isDarkMode ? "border-gray-700 bg-gray-800" : "border-gray-300 bg-white"
+            }`}>
+              <ScrollView>
+                <TouchableOpacity 
+                  onPress={() => {
+                    setPaymentMethod('Cash');
+                    setShowPaymentMethodPicker(false);
+                  }}
+                  className={`p-3 border-b ${
+                    isDarkMode ? "border-gray-700" : "border-gray-300"
+                  }`}
+                >
+                  <Text className={isDarkMode ? "text-gray-200" : "text-gray-900"}>Cash</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  onPress={() => {
+                    setPaymentMethod('Credit Card');
+                    setShowPaymentMethodPicker(false);
+                  }}
+                  className={`p-3 border-b ${
+                    isDarkMode ? "border-gray-700" : "border-gray-300"
+                  }`}
+                >
+                  <Text className={isDarkMode ? "text-gray-200" : "text-gray-900"}>Credit Card</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  onPress={() => {
+                    setPaymentMethod('Debit Card');
+                    setShowPaymentMethodPicker(false);
+                  }}
+                  className={`p-3 border-b ${
+                    isDarkMode ? "border-gray-700" : "border-gray-300"
+                  }`}
+                >
+                  <Text className={isDarkMode ? "text-gray-200" : "text-gray-900"}>Debit Card</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  onPress={() => {
+                    setPaymentMethod('Bank Transfer');
+                    setShowPaymentMethodPicker(false);
+                  }}
+                  className="p-3"
+                >
+                  <Text className={isDarkMode ? "text-gray-200" : "text-gray-900"}>Bank Transfer</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            </View>
+          )}
+        </View>
+
+        {/* Notes */}
+        <View className="mb-4">
+          <Text className={`text-sm font-medium mb-2 ${isDarkMode ? "text-gray-300" : "text-gray-800"}`}>
+            Description
+          </Text>
+          <TextInput
+            value={notes}
+            onChangeText={handleNotesChange}
+            placeholder="Enter transaction description"
+            multiline
+            numberOfLines={3}
+            onFocus={handleInputFocus}
+            className={`p-3 rounded-lg border ${
+              isDarkMode ? "border-gray-700 bg-gray-800 text-gray-200" : "border-gray-300 bg-white text-gray-900"
+            }`}
+          />
+          <Text className={`text-xs mt-1 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+            {notes.length}/200 characters • {(notes.match(/\n/g) || []).length}/10 lines
+          </Text>
+        </View>
+
+        {/* Submit Button */}
+        <TouchableOpacity 
+          onPress={handleSubmit}
+          className={`p-4 rounded-lg items-center ${
+            isDarkMode ? "bg-blue-900" : "bg-blue-600"
+          }`}
+        >
+          <Text className="text-white font-semibold">Add Transaction</Text>
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );
