@@ -50,4 +50,18 @@ export interface Income extends Timestamps {
   source: string;
   dateReceived: Timestamp;
   accountId: string;
+}
+
+export interface User {
+  id: string;
+  email: string;
+  displayName: string | null;
+  photoURL: string | null;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  preferences: {
+    theme: 'light' | 'dark' | 'system';
+    currency: string;
+    language: string;
+  };
 } 

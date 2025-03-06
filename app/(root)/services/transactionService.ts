@@ -1,40 +1,52 @@
 import { db } from '../firebase/firebaseConfig';
-import { collection, addDoc, getDocs, query, where, orderBy, limit as firestoreLimit, doc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, orderBy, limit as firestoreLimit, doc, updateDoc, deleteDoc, Timestamp, increment, serverTimestamp } from 'firebase/firestore';
 import { Transaction } from '../firebase/types';
+import { AccountService } from './accountService';
 
 export class TransactionService {
   private static collection = 'transactions';
 
-  static async createTransaction(transaction: Omit<Transaction, 'id'>): Promise<string> {
-    try {
-      const docRef = await addDoc(collection(db, this.collection), {
-        ...transaction,
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now()
-      });
-      return docRef.id;
-    } catch (error) {
-      console.error('Error creating transaction:', error);
-      throw error;
-    }
+  static async createTransaction(transaction: Omit<Transaction, 'id'>): Promise<void> {
+    const transactionRef = await addDoc(collection(db, this.collection), {
+      ...transaction,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+
+    // Update account balance based on transaction type
+    const accountRef = doc(db, 'accounts', transaction.accountId);
+    const amount = transaction.transactionType === 'expense' ? -transaction.amount : transaction.amount;
+    
+    await updateDoc(accountRef, {
+      balance: increment(amount),
+      updatedAt: serverTimestamp()
+    });
   }
 
   static async getUserTransactions(userId: string): Promise<Transaction[]> {
-    try {
-      const q = query(
-        collection(db, this.collection),
-        where('userId', '==', userId),
-        orderBy('date', 'desc')
-      );
-      const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as Transaction));
-    } catch (error) {
-      console.error('Error fetching user transactions:', error);
-      throw error;
-    }
+    const q = query(
+      collection(db, this.collection),
+      where('userId', '==', userId)
+    );
+
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    })) as Transaction[];
+  }
+
+  static async getAccountTransactions(accountId: string): Promise<Transaction[]> {
+    const q = query(
+      collection(db, this.collection),
+      where('accountId', '==', accountId)
+    );
+
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    })) as Transaction[];
   }
 
   static async getRecentTransactions(userId: string, limitCount: number = 5): Promise<Transaction[]> {
