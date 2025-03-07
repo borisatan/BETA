@@ -13,8 +13,8 @@ export default function Index() {
       <Text className="font-bold text-lg my-4">Welcome to Restate</Text>
       <Link href="/profile" className="my-4">Profile</Link>
       <Link href="/budget" className="my-4">Budget</Link>
-      <Link href="/sign-in" className="my-4">Sign In</Link>
-      <Link href="/sign-up" className="my-4">Sign Up</Link>
+      <Link href="sign-in" className="my-4">Sign In</Link>
+      <Link href="sign-up" className="my-4">Sign Up</Link>
     </View>
   );
 }

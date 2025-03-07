@@ -213,7 +213,6 @@ Uses a swipe-to-delete gesture for easy transaction removal.
 Tapping reveals:
 1️⃣ ➕ Add Transaction (Manual Entry)
 2️⃣ 📸 Scan Receipt (OCR for auto-logging)
-3️⃣ 🔄 Sync with Bank (Fetch latest transactions)
 
 📌 Design Style:
 
