@@ -1,52 +1,72 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, Image, useColorScheme, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, Image, Alert } from 'react-native';
+import icons from '@constants/icons';
+import { Link, router } from 'expo-router';
+import Constants from 'expo-constants';
+import { auth } from "../firebase/firebaseConfig";
+import { createUserWithEmailAndPassword, GoogleAuthProvider, signInWithCredential } from "firebase/auth";
+import * as Google from "expo-auth-session/providers/google";
+import { FirebaseError } from "firebase/app";
 import Toast from 'react-native-toast-message';
-import { Link } from 'expo-router';
-import { create } from 'lodash';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { auth, db } from '../firebase/firebaseConfig';
-import { doc, setDoc } from 'firebase/firestore';
+import { useTheme } from '../context/ThemeContext';
+import { UserService } from '../services/userService';
 
 const SignUp = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
-    const colorScheme = useColorScheme();
-    const isDarkMode = colorScheme === 'dark';
+    const { isDarkMode } = useTheme();
 
-    const handleSignUp = async (e : any) => {
+    // Google Sign-In - Setup
+    const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
+        clientId: Constants.expoConfig?.extra?.googleClientId,
+    });
+
+    const handleEmailSignUp = async () => {
         if (!email.trim() || !password.trim() || !confirmPassword.trim()) {
-            Toast.show({type: "error", text1: "Error", text2: "Email and password cannot be empty."});
+            Toast.show({type: 'error', text1: 'Error', text2: 'All fields are required.'});
             return;
         }
-        // e.preventDefault();
-        try {
-            await createUserWithEmailAndPassword(auth, email, password);
-            const user = auth.currentUser;
-            console.log('User signed up:', user);
-            if (user) {
-                await setDoc(doc(db, "users", user.uid), {
-                    email: user.email
-                })
-            }
+
+        if (password !== confirmPassword) {
+            Toast.show({type: 'error', text1: 'Error', text2: 'Passwords do not match.'});
+            return;
         }
-        catch (error: any) {
-            console.log(error.code)
-            switch (error.code) {
-                case 'auth/email-already-in-use':
-                    Toast.show({type: "error", text1: "Error", text2: "Email already in use."});
-                    break;
-                case 'auth/invalid-email':
-                    Toast.show({type: "error", text1: "Error", text2: "Invalid email format."});
-                    break;
-                case 'auth/weak-password':
-                    Toast.show({type: "error", text1: "Error", text2: "Password should be at least 6 characters."});
-                    break;
+
+        try {
+            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+            const user = userCredential.user;
+            
+            // Create user document in Firestore
+            await UserService.createUser(user.uid, user.email || '', user.displayName, user.photoURL);
+            
+            Toast.show({type: 'success', text1: 'Welcome!', text2: 'Account created successfully.'});
+            router.replace('/');
+        } catch (error: any) {
+            if (error instanceof FirebaseError) {
+                console.error('Firebase Error:', error.code, error.message);
+                let errorMessage = 'An error occurred. Please try again.';
+
+                switch (error.code) {
+                    case 'auth/email-already-in-use':
+                        errorMessage = 'This email is already registered.';
+                        break;
+                    case 'auth/invalid-email':
+                        errorMessage = 'Invalid email address.';
+                        break;
+                    case 'auth/weak-password':
+                        errorMessage = 'Password should be at least 6 characters.';
+                        break;
+                    default:
+                        errorMessage = 'Something went wrong. Please try again.';
+                        break;
+                }
+                Toast.show({ type: 'error', text1: 'Error', text2: errorMessage });
+            } else {
+                console.error('Unexpected Error: ', error);
             }
-            console.error('Error signing up:', error);
         }
     };
-    
 
     return (
         <ScrollView
@@ -92,7 +112,7 @@ const SignUp = () => {
                     />
                     <TouchableOpacity
                         className="bg-blue-900 dark:bg-blue-600 p-3 rounded-lg items-center"
-                        onPress={handleSignUp}
+                        onPress={handleEmailSignUp}
                     >
                         <Text className="text-white text-sm font-semibold">Sign up</Text>
                     </TouchableOpacity>

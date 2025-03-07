@@ -1,0 +1,38 @@
+Subcategory Management for Budget Dashboard
+
+Overview:
+Allow users to create and manage subcategories for each main category in the budget dashboard.
+
+Feature Details:
+1. Category-Subcategory Relationship
+   - Each main category (e.g., Food & Dining, Transportation) can have multiple subcategories
+   - Subcategories are specific to their parent category
+   - Example: Food & Dining -> Restaurants, Groceries, Takeout, etc.
+
+2. UI Implementation
+   - Add a "Manage Subcategories" button in the budget dashboard
+   - When clicked, show a modal/screen with:
+     * List of main categories
+     * For each category, show its subcategories
+     * Add/Edit/Delete subcategory options
+     * Drag-and-drop reordering of subcategories
+
+3. Data Structure
+   - Subcategories stored in Firestore with:
+     * id
+     * name
+     * categoryId (reference to parent category)
+     * userId (for user-specific subcategories)
+     * createdAt/updatedAt timestamps
+
+4. User Experience
+   - Simple interface to add/edit subcategories
+   - Visual hierarchy showing category-subcategory relationship
+   - Ability to reorder subcategories for personal preference
+   - Option to hide/show subcategories in the main dashboard view
+
+5. Future Enhancements
+   - Color coding for subcategories
+   - Budget allocation per subcategory
+   - Spending trends by subcategory
+   - Custom icons for subcategories 

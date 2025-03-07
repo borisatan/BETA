@@ -2,7 +2,9 @@ import 'dotenv/config'; // Import dotenv to load variables from the .env file
 
 export default {
   expo: {
-    scheme: 'myapp',
+    name: 'BETA',
+    slug: 'BETA',
+    scheme: 'BETA',
     extra: {
       firebase: {
         apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
@@ -14,5 +16,13 @@ export default {
       },
       googleClientId: process.env.GOOGLE_CLIENT_ID,
     },
+    android: {
+      package: "com.BETA.app",
+      googleServicesFile: "./google-services.json"
+    },
+    ios: {
+      bundleIdentifier: "com.BETA.app",
+      googleServicesFile: "./GoogleService-Info.plist"
+    }
   },
 };
