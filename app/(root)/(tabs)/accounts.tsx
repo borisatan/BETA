@@ -1,17 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, TextInput, Platform, Alert, Keyboard } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, TextInput, Platform, Alert, Keyboard, ActivityIndicator } from 'react-native';
 import { AccountService } from '../services/accountService';
 import { Account } from '../firebase/types';
 import { auth } from '../firebase/firebaseConfig';
 import Toast from 'react-native-toast-message';
 import { useTheme } from '../context/ThemeContext';
 import { serverTimestamp } from 'firebase/firestore';
+import { useRouter } from 'expo-router';
 
 const Accounts = () => {
+  const router = useRouter();
   const { isDarkMode } = useTheme();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [showAddAccount, setShowAddAccount] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
+  const [isEditMode, setIsEditMode] = useState(false);
   const [newAccountName, setNewAccountName] = useState('');
   const [newAccountBalance, setNewAccountBalance] = useState('');
   const [newAccountType, setNewAccountType] = useState<'Checking' | 'Savings' | 'Cash' | 'Card'>('Checking');
@@ -22,12 +25,15 @@ const Accounts = () => {
   // Separate state for edit form dropdowns
   const [showEditTypePicker, setShowEditTypePicker] = useState(false);
   const [showEditCurrencyPicker, setShowEditCurrencyPicker] = useState(false);
+  // Add a new state for loading at the top with other states
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     fetchAccounts();
   }, []);
 
   const fetchAccounts = async () => {
+    setIsLoading(true); // Set loading to true when starting to fetch
     try {
       const userId = auth.currentUser?.uid;
       if (!userId) {
@@ -47,6 +53,8 @@ const Accounts = () => {
         text1: 'Error',
         text2: 'Failed to fetch accounts'
       });
+    } finally {
+      setIsLoading(false); // Set loading to false when done
     }
   };
 
@@ -214,6 +222,18 @@ const Accounts = () => {
     );
   };
 
+  const handleAccountPress = (account: Account) => {
+    if (isEditMode) {
+      startEditingAccount(account);
+    } else {
+      // Navigate to transactions overview for this account
+      router.push({
+        pathname: '/transactions',
+        params: { accountId: account.id }
+      });
+    }
+  };
+
   return (
     <ScrollView 
       className={`flex-1 ${isDarkMode ? "bg-[#0A0F1F]" : "bg-white"}`}
@@ -221,13 +241,27 @@ const Accounts = () => {
     >
       <View className="w-full max-w-md mx-auto">
         {/* Header */}
-        <View className="items-center mb-8">
-          <Text className={`text-2xl font-bold ${isDarkMode ? "text-gray-200" : "text-gray-900"}`}>
-            Accounts
-          </Text>
-          <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}>
-            Manage your financial accounts
-          </Text>
+        <View className="flex-row justify-between items-center mb-8">
+          <View>
+            <Text className={`text-2xl font-bold ${isDarkMode ? "text-gray-200" : "text-gray-900"}`}>
+              Accounts
+            </Text>
+            <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}>
+              Manage your financial accounts
+            </Text>
+          </View>
+          <TouchableOpacity 
+            onPress={() => setIsEditMode(!isEditMode)}
+            className={`px-4 py-2 rounded-lg ${
+              isEditMode 
+                ? (isDarkMode ? "bg-blue-900" : "bg-blue-600")
+                : (isDarkMode ? "bg-gray-700" : "bg-gray-200")
+            }`}
+          >
+            <Text className={isEditMode ? "text-white" : (isDarkMode ? "text-gray-300" : "text-gray-800")}>
+              {isEditMode ? "Done" : "Edit"}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Add Account Button */}
@@ -242,6 +276,16 @@ const Accounts = () => {
         >
           <Text className="text-white font-semibold">Add New Account</Text>
         </TouchableOpacity>
+
+        {/* Loading Indicator */}
+        {isLoading && (
+          <View className="items-center mb-6">
+            <ActivityIndicator size="large" color={isDarkMode ? "#1E40AF" : "#1E3A8A"} />
+            <Text className={`mt-2 ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}>
+              Loading accounts...
+            </Text>
+          </View>
+        )}
 
         {/* Add Account Form */}
         {showAddAccount && (
@@ -429,7 +473,7 @@ const Accounts = () => {
           {accounts.map((account) => (
             <View key={account.id}>
               <TouchableOpacity 
-                onPress={() => startEditingAccount(account)}
+                onPress={() => handleAccountPress(account)}
                 className={`p-4 rounded-lg border ${
                   isDarkMode ? "border-gray-700 bg-gray-800" : "border-gray-300 bg-white"
                 }`}
@@ -456,8 +500,8 @@ const Accounts = () => {
                 </View>
               </TouchableOpacity>
 
-              {/* Edit Form - Only show for the selected account */}
-              {editingAccount?.id === account.id && (
+              {/* Edit Form - Only show for the selected account and in edit mode */}
+              {isEditMode && editingAccount?.id === account.id && (
                 <View className={`mt-2 p-4 rounded-lg border ${
                   isDarkMode ? "border-gray-700 bg-gray-800" : "border-gray-300 bg-white"
                 }`}>

@@ -2,6 +2,7 @@ import { db } from '../firebase/firebaseConfig';
 import { collection, addDoc, getDocs, query, where, orderBy, limit as firestoreLimit, doc, updateDoc, deleteDoc, Timestamp, increment, serverTimestamp } from 'firebase/firestore';
 import { Transaction } from '../firebase/types';
 import { AccountService } from './accountService';
+import { auth } from '../firebase/firebaseConfig';
 
 export class TransactionService {
   private static collection = 'transactions';
@@ -17,7 +18,7 @@ export class TransactionService {
     const accountRef = doc(db, 'accounts', transaction.accountId);
     const amount = transaction.transactionType === 'expense' ? -transaction.amount : transaction.amount;
     
-    await updateDoc(accountRef, {
+    await updateDoc(accountRef, { 
       balance: increment(amount),
       updatedAt: serverTimestamp()
     });
@@ -37,16 +38,28 @@ export class TransactionService {
   }
 
   static async getAccountTransactions(accountId: string): Promise<Transaction[]> {
-    const q = query(
-      collection(db, this.collection),
-      where('accountId', '==', accountId)
-    );
+    try {
+      const userId = auth.currentUser?.uid;
+      if (!userId) {
+        throw new Error('User not authenticated');
+      }
 
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    })) as Transaction[];
+      const q = query(
+        collection(db, this.collection),
+        where('accountId', '==', accountId),
+        where('userId', '==', userId),
+        orderBy('date', 'desc')
+      );
+
+      const querySnapshot = await getDocs(q);
+      return querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Transaction[];
+    } catch (error) {
+      console.error('Error fetching account transactions:', error);
+      throw error;
+    }
   }
 
   static async getRecentTransactions(userId: string, limitCount: number = 5): Promise<Transaction[]> {

@@ -9,6 +9,7 @@ import * as Google from "expo-auth-session/providers/google";
 import { FirebaseError } from "firebase/app";
 import Toast from 'react-native-toast-message';
 import { useTheme } from '../context/ThemeContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const SignIn = () => {
   const [email, setEmail] = useState('');
@@ -36,6 +37,8 @@ const SignIn = () => {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       console.log('User signed in:', userCredential.user);
+      // Store authentication state
+      await AsyncStorage.setItem('isAuthenticated', 'true');
       Toast.show({type: 'success', text1: 'Welcome Back!', text2: 'Signed in successfully.'});
     } catch (error: any) {
       if (error instanceof FirebaseError) {
@@ -67,6 +70,8 @@ const SignIn = () => {
     try {
       const googleCredential = GoogleAuthProvider.credential(idToken);
       const userCredential = await signInWithCredential(auth, googleCredential);
+      // Store authentication state
+      await AsyncStorage.setItem('isAuthenticated', 'true');
       console.log('Google Sign-In successful:', userCredential.user);
       setGoogleUser(userCredential.user);
     } catch (error) {

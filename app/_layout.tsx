@@ -3,8 +3,8 @@ import Toast from 'react-native-toast-message';
 import "./global.css"
 import { useFonts } from "expo-font";
 import { useEffect } from "react";
-import { ThemeProvider } from './(root)/context/ThemeContext';
-import { AuthProvider } from './(root)/context/AuthContext';
+import { AuthProvider } from "./(root)/context/AuthContext";
+import { ThemeProvider } from "./(root)/context/ThemeContext";
 
 export default function RootLayout() {
   const fontsLoaded = useFonts({
@@ -27,13 +27,17 @@ export default function RootLayout() {
   }
 
   return (
-    <AuthProvider>
-      <ThemeProvider>
-        <Stack screenOptions={{ headerShown: false }}>
+    <ThemeProvider>
+      <AuthProvider>
+        <Stack
+          screenOptions={{
+            headerShown: false,
+          }}
+        >
           <Stack.Screen name="(root)" />
         </Stack>
         <Toast />
-      </ThemeProvider>
-    </AuthProvider>
+      </AuthProvider>
+    </ThemeProvider>
   )
 }
