@@ -1,1 +1,1 @@
-Transactions with no name should have a default name = "Transaction"
+SUBCATEGORIES DO NOT SHOW UP UNDER NEWLY ADDED MAIN CATEGORIES
