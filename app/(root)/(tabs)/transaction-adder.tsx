@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, Platform, Keyboard, KeyboardAvoidingView, Modal, Dimensions, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, Platform, Keyboard, KeyboardAvoidingView, Modal, Dimensions, Alert, ActivityIndicator } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Toast from 'react-native-toast-message';
 import { TransactionService } from '../services/transactionService';
@@ -41,6 +41,9 @@ const TransactionAdder = () => {
   const [newMainCategoryIcon, setNewMainCategoryIcon] = useState('priority-high');
   const [emojiInput, setEmojiInput] = useState('');
   const [showEmojiInput, setShowEmojiInput] = useState(false);
+  const [isLoadingAccounts, setIsLoadingAccounts] = useState(true);
+  const [isLoadingCategories, setIsLoadingCategories] = useState(true);
+  const [isLoadingMainCategories, setIsLoadingMainCategories] = useState(true);
 
   // Define available icons for category selection
   const availableIcons = [
@@ -76,6 +79,7 @@ const TransactionAdder = () => {
   }, []);
 
   const fetchAccounts = async () => {
+    setIsLoadingAccounts(true);
     try {
       const userId = auth.currentUser?.uid;
       if (!userId) {
@@ -98,10 +102,13 @@ const TransactionAdder = () => {
         text1: 'Error',
         text2: 'Failed to fetch accounts'
       });
+    } finally {
+      setIsLoadingAccounts(false);
     }
   };
 
   const fetchCategories = async () => {
+    setIsLoadingCategories(true);
     try {
       const userId = auth.currentUser?.uid;
       if (!userId) {
@@ -121,10 +128,13 @@ const TransactionAdder = () => {
         text1: 'Error',
         text2: 'Failed to fetch categories'
       });
+    } finally {
+      setIsLoadingCategories(false);
     }
   };
 
   const fetchMainCategories = async () => {
+    setIsLoadingMainCategories(true);
     try {
       const userId = auth.currentUser?.uid;
       if (!userId) {
@@ -148,6 +158,8 @@ const TransactionAdder = () => {
         text1: 'Error',
         text2: 'Failed to fetch main categories'
       });
+    } finally {
+      setIsLoadingMainCategories(false);
     }
   };
 
@@ -479,91 +491,126 @@ const TransactionAdder = () => {
           <View className="flex-row items-center mb-2">
             <Text className={`text-sm font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
               Accounts:
-          </Text>
+            </Text>
           </View>
+          {isLoadingAccounts ? (
+            <View className="items-center py-4">
+              <ActivityIndicator size="small" color={isDarkMode ? "#1E40AF" : "#1E3A8A"} />
+              <Text className={`mt-2 text-sm ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}>
+                Loading accounts...
+              </Text>
+            </View>
+          ) : (
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              className="flex-row"
+            >
+              {accounts.map((account) => (
+                <TouchableOpacity 
+                  key={account.id}
+                  onPress={() => setSelectedAccount(account.id)}
+                  className={`mr-3 px-4 py-2 rounded-full ${
+                    selectedAccount === account.id
+                      ? (isDarkMode ? "bg-[#1E40AF]" : "bg-[#1E3A8A]")
+                      : (isDarkMode ? "bg-gray-800" : "bg-gray-100")
+                  }`}
+                >
+                  <Text className={`${
+                    selectedAccount === account.id ? "text-white" : (isDarkMode ? "text-gray-200" : "text-gray-900")
+                  }`}>
+                    {account.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
+        </View>
+            
+        {/* Main Categories */}
+        {isLoadingMainCategories ? (
+          <View className="items-center py-4">
+            <ActivityIndicator size="small" color={isDarkMode ? "#1E40AF" : "#1E3A8A"} />
+            <Text className={`mt-2 text-sm ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}>
+              Loading main categories...
+            </Text>
+          </View>
+        ) : (
           <ScrollView 
             horizontal 
             showsHorizontalScrollIndicator={false}
-            className="flex-row"
+            className="px-6 mb-6"
           >
-            {accounts.map((account) => (
-            <TouchableOpacity 
-                key={account.id}
-                onPress={() => setSelectedAccount(account.id)}
-                className={`mr-3 px-4 py-2 rounded-full ${
-                  selectedAccount === account.id
+            {mainCategories.map((category) => (
+              <TouchableOpacity 
+                key={category.id}
+                onPress={() => handleMainCategorySelect(category.name)}
+                className={`mr-4 px-4 py-2 rounded-lg flex-row items-center ${
+                  selectedMainCategory === category.name
                     ? (isDarkMode ? "bg-[#1E40AF]" : "bg-[#1E3A8A]")
                     : (isDarkMode ? "bg-gray-800" : "bg-gray-100")
                 }`}
               >
-                <Text className={`${
-                  selectedAccount === account.id ? "text-white" : (isDarkMode ? "text-gray-200" : "text-gray-900")
+                {category.icon.length <= 2 ? (
+                  <Text style={{ fontSize: 20 }}>{category.icon}</Text>
+                ) : (
+                  <MaterialIcons 
+                    name={category.icon as any} 
+                    size={20} 
+                    color={selectedMainCategory === category.name ? "white" : (isDarkMode ? "#E5E7EB" : "#1F2937")} 
+                  />
+                )}
+                <Text className={`ml-2 ${
+                  selectedMainCategory === category.name ? "text-white" : (isDarkMode ? "text-gray-200" : "text-gray-900")
                 }`}>
-                  {account.name}
-              </Text>
-            </TouchableOpacity>
+                  {category.name}
+                </Text>
+              </TouchableOpacity>
             ))}
           </ScrollView>
-        </View>
-            
-        {/* Main Categories */}
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false}
-          className="px-6 mb-6"
-        >
-          {mainCategories.map((category) => (
-            <TouchableOpacity 
-              key={category.id}
-              onPress={() => handleMainCategorySelect(category.name)}
-              className={`mr-4 px-4 py-2 rounded-lg flex-row items-center ${
-                selectedMainCategory === category.name
-                  ? (isDarkMode ? "bg-[#1E40AF]" : "bg-[#1E3A8A]")
-                  : (isDarkMode ? "bg-gray-800" : "bg-gray-100")
-              }`}
-            >
-              <MaterialIcons 
-                name={category.icon as any} 
-                size={20} 
-                color={selectedMainCategory === category.name ? "white" : (isDarkMode ? "#E5E7EB" : "#1F2937")} 
-              />
-              <Text className={`ml-2 ${
-                selectedMainCategory === category.name ? "text-white" : (isDarkMode ? "text-gray-200" : "text-gray-900")
-              }`}>
-                {category.name}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+        )}
 
         {/* Subcategories Grid */}
         <View className="px-6">
-          <View className="flex-row flex-wrap justify-center">
-            {categories
-              .filter(cat => cat.mainCategory === selectedMainCategory)
-              .map((subCategory) => (
-            <TouchableOpacity 
-                  key={subCategory.id}
-                  onPress={() => handleCategorySelect(subCategory.name)}
-                  className={`w-[31%] mb-4 mx-1 aspect-square rounded-lg ${
-                    isDarkMode ? "bg-gray-800" : "bg-gray-100"
-                  }`}
-                >
-                  <View className="flex-1 items-center justify-center">
-                    <MaterialIcons 
-                      name={subCategory.icon as any} 
-                      size={32} 
-                      color={isDarkMode ? "#E5E7EB" : "#1F2937"} 
-                    />
-                    <Text className={`mt-2 text-center text-sm ${
-                      isDarkMode ? "text-gray-200" : "text-gray-900"
-                    }`}>
-                      {subCategory.name}
+          {isLoadingCategories ? (
+            <View className="items-center py-4">
+              <ActivityIndicator size="small" color={isDarkMode ? "#1E40AF" : "#1E3A8A"} />
+              <Text className={`mt-2 text-sm ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}>
+                Loading subcategories...
               </Text>
-                  </View>
-            </TouchableOpacity>
-              ))}
-          </View>
+            </View>
+          ) : (
+            <View className="flex-row flex-wrap justify-center">
+              {categories
+                .filter(cat => cat.mainCategory === selectedMainCategory)
+                .map((subCategory) => (
+                  <TouchableOpacity 
+                    key={subCategory.id}
+                    onPress={() => handleCategorySelect(subCategory.name)}
+                    className={`w-[31%] mb-4 mx-1 aspect-square rounded-lg ${
+                      isDarkMode ? "bg-gray-800" : "bg-gray-100"
+                    }`}
+                  >
+                    <View className="flex-1 items-center justify-center">
+                      {subCategory.icon.length <= 2 ? (
+                        <Text style={{ fontSize: 32 }}>{subCategory.icon}</Text>
+                      ) : (
+                        <MaterialIcons 
+                          name={subCategory.icon as any} 
+                          size={32} 
+                          color={isDarkMode ? "#E5E7EB" : "#1F2937"} 
+                        />
+                      )}
+                      <Text className={`mt-2 text-center text-sm ${
+                        isDarkMode ? "text-gray-200" : "text-gray-900"
+                      }`}>
+                        {subCategory.name}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+            </View>
+          )}
         </View>
 
         {/* Category Management Modal */}
@@ -629,86 +676,37 @@ const TransactionAdder = () => {
                     Subcategories
                   </Text>
                   
-                  {/* Needs Subcategories */}
-                  <View className="mb-6">
-                    <Text className={`text-base font-medium mb-2 ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
-                      Needs
-                    </Text>
-                    {categories
-                      .filter(cat => cat.mainCategory === 'Needs')
-                      .map((category) => (
-                        <View key={`sub-${category.id}`} className="flex-row items-center justify-between mb-3 p-3 rounded-lg bg-opacity-5 bg-gray-500">
-                          <View className="flex-row items-center">
-                            <MaterialIcons name={category.icon as any} size={20} color={isDarkMode ? "#E5E7EB" : "#1F2937"} />
-                            <Text className={`ml-3 ${isDarkMode ? "text-gray-200" : "text-gray-900"}`}>
-                              {category.name}
-                            </Text>
+                  {mainCategories.map((mainCat) => (
+                    <View key={`main-${mainCat.id}`} className="mb-6">
+                      <Text className={`text-base font-medium mb-2 ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                        {mainCat.name}
+                      </Text>
+                      {categories
+                        .filter(cat => cat.mainCategory === mainCat.name)
+                        .map((category) => (
+                          <View key={`sub-${category.id}`} className="flex-row items-center justify-between mb-3 p-3 rounded-lg bg-opacity-5 bg-gray-500">
+                            <View className="flex-row items-center">
+                              {category.icon.length <= 2 ? (
+                                <Text style={{ fontSize: 20 }}>{category.icon}</Text>
+                              ) : (
+                                <MaterialIcons name={category.icon as any} size={20} color={isDarkMode ? "#E5E7EB" : "#1F2937"} />
+                              )}
+                              <Text className={`ml-3 ${isDarkMode ? "text-gray-200" : "text-gray-900"}`}>
+                                {category.name}
+                              </Text>
+                            </View>
+                            <View className="flex-row">
+                              <TouchableOpacity onPress={() => handleEditCategory(category)} className="mr-4">
+                                <MaterialIcons name="edit" size={20} color={isDarkMode ? "#E5E7EB" : "#1F2937"} />
+                              </TouchableOpacity>
+                              <TouchableOpacity onPress={() => handleDeleteCategory(category)}>
+                                <MaterialIcons name="delete" size={20} color={isDarkMode ? "#EF4444" : "#B91C1C"} />
+                              </TouchableOpacity>
+                            </View>
                           </View>
-                          <View className="flex-row">
-                            <TouchableOpacity onPress={() => handleEditCategory(category)} className="mr-4">
-                              <MaterialIcons name="edit" size={20} color={isDarkMode ? "#E5E7EB" : "#1F2937"} />
-                            </TouchableOpacity>
-                            <TouchableOpacity onPress={() => handleDeleteCategory(category)}>
-                              <MaterialIcons name="delete" size={20} color={isDarkMode ? "#EF4444" : "#B91C1C"} />
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-                      ))}
-                  </View>
-
-                  {/* Wants Subcategories */}
-                  <View className="mb-6">
-                    <Text className={`text-base font-medium mb-2 ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
-                      Wants
-                    </Text>
-                    {categories
-                      .filter(cat => cat.mainCategory === 'Wants')
-                      .map((category) => (
-                        <View key={`sub-${category.id}`} className="flex-row items-center justify-between mb-3 p-3 rounded-lg bg-opacity-5 bg-gray-500">
-                          <View className="flex-row items-center">
-                            <MaterialIcons name={category.icon as any} size={20} color={isDarkMode ? "#E5E7EB" : "#1F2937"} />
-                            <Text className={`ml-3 ${isDarkMode ? "text-gray-200" : "text-gray-900"}`}>
-                              {category.name}
-                            </Text>
-                          </View>
-                          <View className="flex-row">
-                            <TouchableOpacity onPress={() => handleEditCategory(category)} className="mr-4">
-                              <MaterialIcons name="edit" size={20} color={isDarkMode ? "#E5E7EB" : "#1F2937"} />
-                            </TouchableOpacity>
-                            <TouchableOpacity onPress={() => handleDeleteCategory(category)}>
-                              <MaterialIcons name="delete" size={20} color={isDarkMode ? "#EF4444" : "#B91C1C"} />
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-                      ))}
-                  </View>
-
-                  {/* Savings Subcategories */}
-                  <View className="mb-6">
-                    <Text className={`text-base font-medium mb-2 ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
-                      Savings
-                    </Text>
-                    {categories
-                      .filter(cat => cat.mainCategory === 'Savings')
-                      .map((category) => (
-                        <View key={`sub-${category.id}`} className="flex-row items-center justify-between mb-3 p-3 rounded-lg bg-opacity-5 bg-gray-500">
-                          <View className="flex-row items-center">
-                            <MaterialIcons name={category.icon as any} size={20} color={isDarkMode ? "#E5E7EB" : "#1F2937"} />
-                            <Text className={`ml-3 ${isDarkMode ? "text-gray-200" : "text-gray-900"}`}>
-                              {category.name}
-                            </Text>
-                          </View>
-                          <View className="flex-row">
-                            <TouchableOpacity onPress={() => handleEditCategory(category)} className="mr-4">
-                              <MaterialIcons name="edit" size={20} color={isDarkMode ? "#E5E7EB" : "#1F2937"} />
-                            </TouchableOpacity>
-                            <TouchableOpacity onPress={() => handleDeleteCategory(category)}>
-                              <MaterialIcons name="delete" size={20} color={isDarkMode ? "#EF4444" : "#B91C1C"} />
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-                      ))}
-                  </View>
+                        ))}
+                    </View>
+                  ))}
                 </View>
 
                 {/* Add New Category Button */}
@@ -1160,26 +1158,26 @@ const TransactionAdder = () => {
                     }`}
                   />
                 </View>
-          <View>
+                <View>
                   <Text className={`text-sm mb-1 ${
                     isDarkMode ? "text-gray-300" : "text-gray-700"
                   }`}>
-              Notes (Optional)
-            </Text>
-            <TextInput
-              value={notes}
-              onChangeText={setNotes}
+                    Notes (Optional)
+                  </Text>
+                  <TextInput
+                    value={notes}
+                    onChangeText={setNotes}
                     placeholder="Add notes"
                     className={`p-4 rounded-lg ${
                       isDarkMode 
                         ? "bg-gray-700 text-gray-200" 
                         : "bg-gray-100 text-gray-900"
                     }`}
-            />
-          </View>
+                  />
+                </View>
               </View>
               <View className="flex-row justify-between mt-6">
-          <TouchableOpacity 
+                <TouchableOpacity 
                   onPress={() => setShowAmountModal(false)}
                   className={`flex-1 mr-2 p-4 rounded-lg ${
                     isDarkMode ? "bg-gray-700" : "bg-gray-200"
@@ -1189,8 +1187,8 @@ const TransactionAdder = () => {
                     isDarkMode ? "text-gray-200" : "text-gray-900"
                   }`}>
                     Cancel
-            </Text>
-          </TouchableOpacity>
+                  </Text>
+                </TouchableOpacity>
                 <TouchableOpacity
                   onPress={handleSubmit}
                   className={isDarkMode ? "flex-1 ml-2 p-4 rounded-lg bg-[#1E40AF]" : "flex-1 ml-2 p-4 rounded-lg bg-[#1E3A8A]"}
@@ -1198,10 +1196,10 @@ const TransactionAdder = () => {
                   <Text className="text-white text-center">Save</Text>
                 </TouchableOpacity>
               </View>
-        </View>
-      </View>
+            </View>
+          </View>
         </Modal>
-    </ScrollView>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 };

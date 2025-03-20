@@ -176,17 +176,27 @@ export class CategoryService {
         throw new Error('You do not have permission to delete this main category');
       }
 
-      // Check if there are any categories using this main category
+      // Get all categories using this main category
       const categories = await this.getUserCategories(userId);
       const categoriesUsingMainCategory = categories.filter(
         cat => cat.mainCategory === mainCategory.name
       );
-      if (categoriesUsingMainCategory.length > 0) {
-        throw new Error('Cannot delete main category that has subcategories');
+
+      // Create a batch operation
+      const batch = writeBatch(db);
+
+      // Delete the main category
+      const mainCategoryRef = doc(db, 'mainCategories', mainCategoryId);
+      batch.delete(mainCategoryRef);
+
+      // Delete all associated subcategories
+      for (const category of categoriesUsingMainCategory) {
+        const categoryRef = doc(db, 'categories', category.id);
+        batch.delete(categoryRef);
       }
 
-      const mainCategoryRef = doc(db, 'mainCategories', mainCategoryId);
-      await deleteDoc(mainCategoryRef);
+      // Commit the batch operation
+      await batch.commit();
     } catch (error) {
       console.error('Error deleting main category:', error);
       throw error;
