@@ -1,38 +1,60 @@
-Subcategory Management for Budget Dashboard
 
-Overview:
-Allow users to create and manage subcategories for each main category in the budget dashboard.
+At the top of the page i want 3 graphs next to each other, and the ability to scroll between them.
+FIRST ONE IS A LINE GRAPH:
 
-Feature Details:
-1. Category-Subcategory Relationship
-   - Each main category (e.g., Food & Dining, Transportation) can have multiple subcategories
-   - Subcategories are specific to their parent category
-   - Example: Food & Dining -> Restaurants, Groceries, Takeout, etc.
+   1. Data Processing for the Graph
+   We will fetch transactions from Firebase and process them to generate cumulative spending data for each active budget:
 
-2. UI Implementation
-   - Add a "Manage Subcategories" button in the budget dashboard
-   - When clicked, show a modal/screen with:
-     * List of main categories
-     * For each category, show its subcategories
-     * Add/Edit/Delete subcategory options
-     * Drag-and-drop reordering of subcategories
+   Filter only "expense" transactions using transactionType === "expense".
+   Sort transactions by date (date field) in ascending order.
+   Group transactions by day/week depending on the selected view.
+   Categorize transactions by budget: Assign each expense to its respective budget.
+   Calculate cumulative spending per budget:
+   Start from $0 at the beginning of the budget period (not just the month).
+   Add up each day's total expense to track spending over time for each budget.
+   2. Graph Structure
+   X-Axis (Days/Weeks): Displays the timeline based on the budget duration (e.g., month, vacation week).
+   Y-Axis (Spending Amount): Ranges from $0 to the highest active budget's limit.
+   Budget Lines (Multiple):
+   Each active budget gets a linear reference line from (startDate, 0) to (endDate, budgetAmount).
+   Monthly budgets span the whole month, while event-based budgets only cover their duration.
+   Cumulative Spending Lines:
+   Each budget has a separate spending line that starts at $0 and increases with expenses.
+   Color logic per budget:
+   Green if spending is well below budget.
+   Neutral (gray/blue) when approaching the budget.
+   Red if spending exceeds the budget.
+   3. Firebase Query to Fetch Data
+   To get transactions for the dashboard graph:
 
-3. Data Structure
-   - Subcategories stored in Firestore with:
-     * id
-     * name
-     * categoryId (reference to parent category)
-     * userId (for user-specific subcategories)
-     * createdAt/updatedAt timestamps
+   Filter by userId to get the user’s transactions.
+   Filter by transactionType === "expense".
+   Filter by budgetId to group transactions under their respective budget.
+   Filter transactions by the budget's startDate and endDate, ensuring they only appear in the relevant timeframe.
+   Sort by date in ascending order for proper graph plotting.
+   4. Graph Interactivity
+   Budget Selection Button:
+   Place a button below the graph to allow the user to select which budget they want to view the stats for.
+   The app should remember the last selected budget using AsyncStorage.
+   On app restart, retrieve the selectedBudgetId from AsyncStorage and display the relevant budget’s stats.
+   If no budget is stored, default to the most recent active budget.
+   Tap on a Data Point: Displays the exact spending amount and date for that budget.
+   Toggle Daily/Weekly View: Allows users to switch between different timeframes.
+   Future Spending Projection (Optional): Estimate trends based on the current spending pattern for each budget.
+   5. AsyncStorage Integration
+   To implement the remembering of the selected budget, follow these steps:
 
-4. User Experience
-   - Simple interface to add/edit subcategories
-   - Visual hierarchy showing category-subcategory relationship
-   - Ability to reorder subcategories for personal preference
-   - Option to hide/show subcategories in the main dashboard view
+   Saving the Selected Budget:
 
-5. Future Enhancements
-   - Color coding for subcategories
-   - Budget allocation per subcategory
-   - Spending trends by subcategory
-   - Custom icons for subcategories 
+   When the user selects a budget from the list, save the budgetId to AsyncStorage using:
+   await AsyncStorage.setItem('selectedBudgetId', selectedBudgetId);
+   Loading the Selected Budget on App Restart:
+
+   On app startup, check AsyncStorage for the saved selectedBudgetId:
+   const selectedBudgetId = await AsyncStorage.getItem('selectedBudgetId');
+   If a selectedBudgetId exists, load the corresponding budget stats.
+   If no budget is found in AsyncStorage, default to the most recent active budget.
+
+
+
+SECOND ONE
