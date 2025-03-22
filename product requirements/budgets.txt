@@ -1,0 +1,108 @@
+1. Budget Creation Process
+Users should be able to:
+
+Choose a budget type (e.g., monthly, weekly, custom duration).
+Set a total budget amount.
+Define categories (optional). Unlike the default 50/30/20 split, users can create custom categories (e.g., "Food," "Entertainment," "Transport").
+Set a start and end date.
+Firebase Structure Example:
+Each budget would have:
+
+budgetId (string, unique identifier)
+userId (string)
+name (string, e.g., "March Budget" or "Vacation Fund")
+amount (number, total budget amount)
+categories (array of objects, optional)
+Example: [ { name: "Food", allocated: 500 }, { name: "Travel", allocated: 300 } ]
+startDate (timestamp)
+endDate (timestamp)
+createdAt (timestamp)
+updatedAt (timestamp)
+2. Budget Management
+Modify Budgets: Users can edit or delete any budget at any time.
+Track Spending Per Budget: Transactions should be assigned to a specific budget when created, so user should choose it just like the account they choose
+Notifications: Alerts when spending approaches or exceeds a budget.
+Visualization: Each budget should have a separate spending graph.
+3. Integration with Transactions
+When adding a new transaction, users should be able to select which budget it belongs to.
+The app should track remaining budget balance for each active budget.
+4. Dashboard Display
+Users see a list of all active budgets with their current spending status.
+Selecting a budget opens a detailed breakdown, including:
+A line graph for cumulative spending.
+
+
+
+1. Recurring Budget Setup
+When creating a budget, users should have the option to enable recurrence with:
+
+Frequency Options:
+Weekly (e.g., renew every 7 days)
+Monthly (e.g., renew on the 1st of each month)
+Custom Intervals (e.g., every 3 months)
+End Condition:
+Never Ends (keeps renewing)
+Ends After X Cycles
+Ends on a Specific Date
+2. Automatic Renewal Mechanism
+When a budget period ends, the app should automatically create a new budget entry with the same settings.
+Users should receive a notification before renewal, allowing them to adjust the budget if needed.
+3. Firebase Structure for Recurring Budgets
+Each budget would have additional fields:
+
+isRecurring (boolean) – whether the budget auto-renews
+recurrenceType (string) – "weekly," "monthly," "custom"
+recurrenceInterval (number, if custom) – e.g., 3 for every 3 months
+endDate (timestamp, optional) – when the recurrence stops
+nextRenewalDate (timestamp) – date when the budget will renew
+4. Dashboard Integration
+Recurring budgets appear as active budgets with an indication of their renewal cycle.
+If a budget is set to expire, a reminder notification appears.
+Users should have an option to pause or cancel recurrence at any time.
+
+There should be a couple of different types of budgets
+    1. Budget Category Allocation
+    When creating a budget, users will have the option to allocate their total budget to existing categories (such as Needs, Wants, and Savings).
+
+    Main Categories: By default, the app will suggest these categories:
+    50% Needs: (e.g., rent, groceries, utilities)
+    30% Wants: (e.g., entertainment, dining out, subscriptions)
+    20% Savings: (e.g., emergency fund, retirement, investments)
+    Users can modify these percentages or amounts as needed.
+    2. "Help Me Decide" Option
+    If the user is unsure how to split their budget, the app will provide a “Help me decide” option that automatically sets the default 50/30/20 split for them. This can be triggered during the budget creation process.
+
+    3. Simple Budget Without Categories
+    In cases where users prefer not to use categories (e.g., for a vacation budget where all expenses fall under one category), we’ll offer the option to skip categories altogether.
+
+    For example, a vacation budget could track all spending under one "Vacation" category, simplifying the process without the need for categorization.
+    Users can toggle between a category-based budget and a simple budget with just a total amount.
+    4. Budget Creation Flow
+    Option 1: Category-Based Budget
+    Choose categories (e.g., Needs, Wants, Savings).
+    Set the amounts or percentages for each category.
+    Option 2: Simple Budget
+    Select the total budget amount and leave it without categories.
+    This is ideal for event-based budgets, like a vacation or a single project.
+
+5. User Experience
+During budget creation, users will be prompted to either select categories or opt for a simple budget.
+If they choose categories, they will get the default split and can modify it.
+If they choose a simple budget, they won’t see categories in their budget breakdown.
+
+
+
+Within the budgets page, the existing budgets should be displayed in a similar fashion as the accounts in the accounts page.
+The recurrance selector should look the exact same way as the one in the accounts page when adding income, both in the simple and category based budget makers
+When the user Selects category based budget, he should be prompted to choose: Custom or Help me decide. The prompt should have the same UI 
+as Choose budget type pop up. 
+
+
+The recurrence type should also include the daily and biweekly options. 
+Creating a custom budget, should show under the category allocations, the main categories that the user has saved (by default needs wants savings),
+and the ability to allocate a certain precentage or certain amount of money to each main category, they should also have the option 
+to add or delete main categories (maybe take the functionality from the transaction adder page?).
+After clicking on Next, which should replace the save button, they will be prompted with if they want to allocate to specific subcategories, or just save the Budget
+
+Remove the category allocations help me decide option which currently stays below the recurence type in category based custom budget menu
+

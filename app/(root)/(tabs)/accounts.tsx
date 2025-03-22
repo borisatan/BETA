@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, TextInput, Platform, Alert, Keyboard, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, TextInput, Platform, Alert, Keyboard, ActivityIndicator, Modal } from 'react-native';
 import { AccountService } from '../services/accountService';
 import { Account } from '../firebase/types';
 import { auth } from '../firebase/firebaseConfig';
@@ -27,6 +27,14 @@ const Accounts = () => {
   const [showEditCurrencyPicker, setShowEditCurrencyPicker] = useState(false);
   // Add a new state for loading at the top with other states
   const [isLoading, setIsLoading] = useState(true);
+  const [showIncomeModal, setShowIncomeModal] = useState(false);
+  const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
+  const [incomeAmount, setIncomeAmount] = useState('');
+  const [incomeDescription, setIncomeDescription] = useState('');
+  const [isRecurringIncome, setIsRecurringIncome] = useState(false);
+  const [incomeRecurrenceType, setIncomeRecurrenceType] = useState<'daily' | 'weekly' | 'biweekly' | 'monthly' | 'custom'>('monthly');
+  const [incomeRecurrenceInterval, setIncomeRecurrenceInterval] = useState('1');
+  const [showRecurrenceOptions, setShowRecurrenceOptions] = useState(false);
 
   useEffect(() => {
     fetchAccounts();
@@ -226,10 +234,80 @@ const Accounts = () => {
     if (isEditMode) {
       startEditingAccount(account);
     } else {
-      // Navigate to transactions overview for this account
-      router.push({
-        pathname: '/transactions',
-        params: { accountId: account.id }
+      setSelectedAccount(account);
+      setShowIncomeModal(true);
+      // Reset income form
+      setIncomeAmount('');
+      setIncomeDescription('');
+      setIsRecurringIncome(false);
+      setIncomeRecurrenceType('monthly');
+      setIncomeRecurrenceInterval('1');
+      setShowRecurrenceOptions(false);
+    }
+  };
+
+  const handleAddIncome = async () => {
+    if (!incomeAmount.trim() || !selectedAccount) {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Please enter an amount'
+      });
+      return;
+    }
+
+    try {
+      const userId = auth.currentUser?.uid;
+      if (!userId) {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'You must be logged in to add income'
+        });
+        return;
+      }
+
+      // Create transaction for the income
+      const transactionData = {
+        userId,
+        amount: parseFloat(incomeAmount),
+        description: incomeDescription || 'Income',
+        accountId: selectedAccount.id,
+        categoryId: '', // You might want to create a special income category
+        date: serverTimestamp(),
+        transactionType: 'income',
+        isRecurring: isRecurringIncome,
+        recurrenceType: isRecurringIncome ? incomeRecurrenceType : undefined,
+        recurrenceInterval: isRecurringIncome ? parseInt(incomeRecurrenceInterval) : undefined,
+        nextRecurrenceDate: isRecurringIncome ? serverTimestamp() : undefined,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      };
+
+      // Update account balance
+      const updatedBalance = selectedAccount.balance + parseFloat(incomeAmount);
+      await AccountService.updateAccount(selectedAccount.id, {
+        balance: updatedBalance,
+        updatedAt: serverTimestamp() as any
+      });
+
+      // TODO: Implement TransactionService.createTransaction
+      // await TransactionService.createTransaction(transactionData);
+
+      Toast.show({
+        type: 'success',
+        text1: 'Success',
+        text2: 'Income added successfully'
+      });
+
+      setShowIncomeModal(false);
+      fetchAccounts();
+    } catch (error) {
+      console.error('Error adding income:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Failed to add income'
       });
     }
   };
@@ -510,6 +588,7 @@ const Accounts = () => {
                   </Text>
                   
                   {/* Account Name Input */}
+                  <Text className={`text-sm font-medium mb-2 ${isDarkMode ? "text-gray-300" : "text-gray-800"}`}>Account Name</Text>
                   <TextInput
                     value={newAccountName}
                     onChangeText={setNewAccountName}
@@ -522,6 +601,9 @@ const Accounts = () => {
                   />
 
                   {/* Account Balance Input */}
+                  <Text className={`text-sm font-medium mb-2 ${isDarkMode ? "text-gray-300" : "text-gray-800"}`}>
+                      Account Balance
+                  </Text>
                   <TextInput
                     value={newAccountBalance}
                     onChangeText={setNewAccountBalance}
@@ -694,6 +776,234 @@ const Accounts = () => {
           ))}
         </View>
       </View>
+
+      {/* Income Modal */}
+      <Modal
+        visible={showIncomeModal}
+        transparent={true}
+        animationType="slide"
+      >
+        <View className="flex-1 justify-end">
+          <View className={`rounded-t-3xl p-6 ${
+            isDarkMode ? "bg-gray-800" : "bg-white"
+          }`}>
+            <View className="flex-row justify-between items-center mb-6">
+              <Text className={`text-xl font-bold ${
+                isDarkMode ? "text-gray-200" : "text-gray-900"
+              }`}>
+                Add Income to {selectedAccount?.name}
+              </Text>
+              <TouchableOpacity onPress={() => setShowIncomeModal(false)}>
+                <Text className={isDarkMode ? "text-gray-400" : "text-gray-600"}>Close</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View className="space-y-4">
+              {/* Amount Input */}
+              <View className="mb-4">
+                <Text className={`text-sm mb-1 ${
+                  isDarkMode ? "text-gray-300" : "text-gray-700"
+                }`}>
+                  Amount
+                </Text>
+                <TextInput
+                  value={incomeAmount}
+                  onChangeText={setIncomeAmount}
+                  placeholder="Enter amount"
+                  keyboardType="numeric"
+                  returnKeyType="done"
+                  className={`p-4 rounded-lg ${
+                    isDarkMode 
+                      ? "bg-gray-700 text-gray-200" 
+                      : "bg-gray-100 text-gray-900"
+                  }`}
+                />
+              </View>
+
+              {/* Description Input */}
+              <View className="mb-4">
+                <Text className={`text-sm mb-1 ${
+                  isDarkMode ? "text-gray-300" : "text-gray-700"
+                }`}>
+                  Description (Optional)
+                </Text>
+                <TextInput
+                  value={incomeDescription}
+                  onChangeText={setIncomeDescription}
+                  placeholder="Enter description"
+                  className={`p-4 rounded-lg ${
+                    isDarkMode 
+                      ? "bg-gray-700 text-gray-200" 
+                      : "bg-gray-100 text-gray-900"
+                  }`}
+                />
+              </View>
+
+              {/* Recurrence Toggle */}
+              <View className="mb-4">
+                <Text className={`text-sm mb-1 ${
+                  isDarkMode ? "text-gray-300" : "text-gray-700"
+                }`}>
+                  Recurrence
+                </Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    setIsRecurringIncome(!isRecurringIncome);
+                    setShowRecurrenceOptions(!isRecurringIncome);
+                  }}
+                  className={`p-4 rounded-lg ${
+                    isRecurringIncome
+                      ? (isDarkMode ? "bg-[#1E40AF]" : "bg-[#1E3A8A]")
+                      : (isDarkMode ? "bg-gray-700" : "bg-gray-100")
+                  }`}
+                >
+                  <Text className={`text-center ${
+                    isRecurringIncome ? "text-white" : (isDarkMode ? "text-gray-200" : "text-gray-900")
+                  }`}>
+                    {isRecurringIncome ? 'Recurring Income' : 'One-time Income'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Recurrence Options */}
+              {showRecurrenceOptions && (
+                <View className="mt-4">
+                  <Text className={`text-sm mb-2 ${
+                    isDarkMode ? "text-gray-300" : "text-gray-700"
+                  }`}>
+                    Recurrence Type
+                  </Text>
+                  <ScrollView 
+                    horizontal 
+                    showsHorizontalScrollIndicator={false}
+                    className="flex-row"
+                  >
+                    <TouchableOpacity
+                      onPress={() => setIncomeRecurrenceType('daily')}
+                      className={`mr-3 px-4 py-2 rounded-full ${
+                        incomeRecurrenceType === 'daily'
+                          ? (isDarkMode ? "bg-[#1E40AF]" : "bg-[#1E3A8A]")
+                          : (isDarkMode ? "bg-gray-700" : "bg-gray-100")
+                      }`}
+                    >
+                      <Text className={`${
+                        incomeRecurrenceType === 'daily' ? "text-white" : (isDarkMode ? "text-gray-200" : "text-gray-900")
+                      }`}>
+                        Daily
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => setIncomeRecurrenceType('weekly')}
+                      className={`mr-3 px-4 py-2 rounded-full ${
+                        incomeRecurrenceType === 'weekly'
+                          ? (isDarkMode ? "bg-[#1E40AF]" : "bg-[#1E3A8A]")
+                          : (isDarkMode ? "bg-gray-700" : "bg-gray-100")
+                      }`}
+                    >
+                      <Text className={`${
+                        incomeRecurrenceType === 'weekly' ? "text-white" : (isDarkMode ? "text-gray-200" : "text-gray-900")
+                      }`}>
+                        Weekly
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => setIncomeRecurrenceType('biweekly')}
+                      className={`mr-3 px-4 py-2 rounded-full ${
+                        incomeRecurrenceType === 'biweekly'
+                          ? (isDarkMode ? "bg-[#1E40AF]" : "bg-[#1E3A8A]")
+                          : (isDarkMode ? "bg-gray-700" : "bg-gray-100")
+                      }`}
+                    >
+                      <Text className={`${
+                        incomeRecurrenceType === 'biweekly' ? "text-white" : (isDarkMode ? "text-gray-200" : "text-gray-900")
+                      }`}>
+                        Biweekly
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => setIncomeRecurrenceType('monthly')}
+                      className={`mr-3 px-4 py-2 rounded-full ${
+                        incomeRecurrenceType === 'monthly'
+                          ? (isDarkMode ? "bg-[#1E40AF]" : "bg-[#1E3A8A]")
+                          : (isDarkMode ? "bg-gray-700" : "bg-gray-100")
+                      }`}
+                    >
+                      <Text className={`${
+                        incomeRecurrenceType === 'monthly' ? "text-white" : (isDarkMode ? "text-gray-200" : "text-gray-900")
+                      }`}>
+                        Monthly
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => setIncomeRecurrenceType('custom')}
+                      className={`mr-3 px-4 py-2 rounded-full ${
+                        incomeRecurrenceType === 'custom'
+                          ? (isDarkMode ? "bg-[#1E40AF]" : "bg-[#1E3A8A]")
+                          : (isDarkMode ? "bg-gray-700" : "bg-gray-100")
+                      }`}
+                    >
+                      <Text className={`${
+                        incomeRecurrenceType === 'custom' ? "text-white" : (isDarkMode ? "text-gray-200" : "text-gray-900")
+                      }`}>
+                        Custom
+                      </Text>
+                    </TouchableOpacity>
+                  </ScrollView>
+
+                  {incomeRecurrenceType === 'custom' && (
+                    <View className="mt-4">
+                      <Text className={`text-sm mb-1 ${
+                        isDarkMode ? "text-gray-300" : "text-gray-700"
+                      }`}>
+                        Interval (months)
+                      </Text>
+                      <View className="flex-row">
+                        <TextInput
+                          value={incomeRecurrenceInterval}
+                          onChangeText={setIncomeRecurrenceInterval}
+                          keyboardType="numeric"
+                          returnKeyType="done"
+                          className={`flex-1 p-4 rounded-l-lg ${
+                            isDarkMode 
+                              ? "bg-gray-700 text-gray-200" 
+                              : "bg-gray-100 text-gray-900"
+                          }`}
+                        />
+                      </View>
+                    </View>
+                  )}
+                </View>
+              )}
+            </View>
+
+            {/* Action Buttons */}
+            <View className="flex-row justify-between mt-6">
+              <TouchableOpacity
+                onPress={() => setShowIncomeModal(false)}
+                className={`flex-1 mr-2 p-4 rounded-lg ${
+                  isDarkMode ? "bg-gray-700" : "bg-gray-200"
+                }`}
+              >
+                <Text className={`text-center ${
+                  isDarkMode ? "text-gray-200" : "text-gray-900"
+                }`}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleAddIncome}
+                className={`flex-1 ml-2 p-4 rounded-lg ${
+                  isDarkMode ? "bg-[#1E40AF]" : "bg-[#1E3A8A]"
+                }`}
+              >
+                <Text className="text-white text-center">
+                  Add Income
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 };
