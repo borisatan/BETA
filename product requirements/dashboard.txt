@@ -1,60 +1,123 @@
+Dashboard Page Layout & Structure
+Page Layout Overview:
 
-At the top of the page i want 3 graphs next to each other, and the ability to scroll between them.
-FIRST ONE IS A LINE GRAPH:
+The dashboard page will have a scrollable section at the top where users can swipe between cards containing graphs.
 
-   1. Data Processing for the Graph
-   We will fetch transactions from Firebase and process them to generate cumulative spending data for each active budget:
+These cards will be horizontally scrollable, meaning users can swipe left or right to see different graphs, making it easy for them to check various aspects of their finances.
 
-   Filter only "expense" transactions using transactionType === "expense".
-   Sort transactions by date (date field) in ascending order.
-   Group transactions by day/week depending on the selected view.
-   Categorize transactions by budget: Assign each expense to its respective budget.
-   Calculate cumulative spending per budget:
-   Start from $0 at the beginning of the budget period (not just the month).
-   Add up each day's total expense to track spending over time for each budget.
-   2. Graph Structure
-   X-Axis (Days/Weeks): Displays the timeline based on the budget duration (e.g., month, vacation week).
-   Y-Axis (Spending Amount): Ranges from $0 to the highest active budget's limit.
-   Budget Lines (Multiple):
-   Each active budget gets a linear reference line from (startDate, 0) to (endDate, budgetAmount).
-   Monthly budgets span the whole month, while event-based budgets only cover their duration.
-   Cumulative Spending Lines:
-   Each budget has a separate spending line that starts at $0 and increases with expenses.
-   Color logic per budget:
-   Green if spending is well below budget.
-   Neutral (gray/blue) when approaching the budget.
-   Red if spending exceeds the budget.
-   3. Firebase Query to Fetch Data
-   To get transactions for the dashboard graph:
+Each graph will be displayed in a separate card, and each card will have padding, a slight shadow, and rounded corners for a clean and modern look.
 
-   Filter by userId to get the user’s transactions.
-   Filter by transactionType === "expense".
-   Filter by budgetId to group transactions under their respective budget.
-   Filter transactions by the budget's startDate and endDate, ensuring they only appear in the relevant timeframe.
-   Sort by date in ascending order for proper graph plotting.
-   4. Graph Interactivity
-   Budget Selection Button:
-   Place a button below the graph to allow the user to select which budget they want to view the stats for.
-   The app should remember the last selected budget using AsyncStorage.
-   On app restart, retrieve the selectedBudgetId from AsyncStorage and display the relevant budget’s stats.
-   If no budget is stored, default to the most recent active budget.
-   Tap on a Data Point: Displays the exact spending amount and date for that budget.
-   Toggle Daily/Weekly View: Allows users to switch between different timeframes.
-   Future Spending Projection (Optional): Estimate trends based on the current spending pattern for each budget.
-   5. AsyncStorage Integration
-   To implement the remembering of the selected budget, follow these steps:
+Scrollable Cards:
 
-   Saving the Selected Budget:
+At the top of the page, there’s a horizontal scrollable section containing multiple graph cards.
 
-   When the user selects a budget from the list, save the budgetId to AsyncStorage using:
-   await AsyncStorage.setItem('selectedBudgetId', selectedBudgetId);
-   Loading the Selected Budget on App Restart:
+Each card represents one type of graph. The layout will look like a horizontal row of cards, where users can scroll through them.
 
-   On app startup, check AsyncStorage for the saved selectedBudgetId:
-   const selectedBudgetId = await AsyncStorage.getItem('selectedBudgetId');
-   If a selectedBudgetId exists, load the corresponding budget stats.
-   If no budget is found in AsyncStorage, default to the most recent active budget.
+We want this section to be touch-friendly, meaning users can easily swipe to navigate between graphs.
 
+General Design Considerations:
 
+The cards will have responsive designs, ensuring they look good on both small and large screens.
 
-SECOND ONE
+Each graph card will contain its specific graph, whether it’s a line graph, bar chart, Sankey diagram, or pie chart.
+
+The page will also need to switch between light and dark modes based on user preferences, with proper contrast for accessibility.
+
+Graphs to Display in the Scrollable Cards
+Each card will contain a specific type of graph, and below are the details for each of the 5 graphs that will be displayed:
+
+1. Line Graph: Spending vs. Budget Over Time
+What it Shows: This graph will compare the user’s actual spending over time against their budgeted amount for a specific period (like a month or week).
+
+Design:
+
+The graph will have two lines:
+
+One line will represent the budgeted amount (this could be a solid line).
+
+The other line will represent the actual spending (this could be a dashed or solid line, depending on preference).
+
+Color Coding: The line for actual spending will change colors depending on how close the user is to exceeding their budget:
+
+Green for within the budget.
+
+Yellow for nearing the budget.
+
+Red for over budget.
+
+Interaction: Users can tap on specific points on the line to see detailed data (e.g., exact amount spent on a particular day or week).
+
+2. Bar Chart: Category Spending Breakdown
+What it Shows: This bar chart will display how much the user has spent across different spending categories (e.g., Groceries, Rent, Entertainment) in the current period.
+
+Design:
+
+Each bar represents a main category (e.g., Groceries, Transportation).
+
+The height of each bar corresponds to how much money has been spent in that category.
+
+The bars will be color-coded to indicate whether spending is within the budget:
+
+Green if spending is within budget.
+
+Red if spending exceeds the allocated budget.
+
+Interaction: Tapping on a bar will allow the user to drill down into the subcategories of that particular main category. For example, under Groceries, users might see a breakdown for food, take-out, etc.
+
+3. Sankey Diagram: Spending Flow Between Categories
+What it Shows: The Sankey diagram will visualize how the user’s budget flows from main categories to subcategories. It’s a great way to see where money is being allocated within the larger budget.
+
+Design:
+
+The diagram will show main categories at the top (e.g., Food, Entertainment).
+
+Subcategories will branch off from the main categories (e.g., Groceries, Dining Out under Food).
+
+The width of each flow line represents the amount spent in each subcategory.
+
+The diagram could be color-coded to show how much was spent compared to the allocated budget for each category.
+
+Interaction: Tapping on a specific flow or subcategory will open more detailed information about the transactions or how the funds are being spent.
+
+4. Pie Chart: Category Spending Proportions
+What it Shows: The pie chart will show how the total spending is distributed across the different main categories for the current period.
+
+Design:
+
+Each slice of the pie will represent a main category (e.g., Groceries, Utilities, Entertainment).
+
+The size of the slice represents how much money has been spent in each category.
+
+The color of each slice could be used to represent whether the category is under budget (green), nearing budget (yellow), or over budget (red).
+
+Interaction: Tapping on a slice will show a detailed breakdown of spending within that category (e.g., how much was spent on food, take-out, and groceries under Food).
+
+5. Bar Chart: Expense vs. Income by Account
+What it Shows: This bar chart will display the user’s income and expenses by different account types (e.g., Checking, Credit Card, Savings).
+
+Design:
+
+The chart will have two bars for each account: one for income and one for expenses.
+
+Income bars will be shown in one color (e.g., green) and expense bars in another (e.g., red).
+
+The height of each bar represents the amount of income or expenses in each account.
+
+Interaction: Tapping on any account will provide more detailed information on the transactions and activities within that specific account.
+
+Overall Dashboard Interactivity
+Card Swiping: Users will be able to swipe horizontally through the different graph cards.
+
+Graph Interactivity: Each graph will be interactive, meaning users can tap, hover, or click on specific areas of a graph (e.g., a point on the line graph or a slice of the pie chart) to see more details.
+
+Real-Time Updates: All graphs should update in real-time based on user actions, such as adding transactions or updating budgets.
+
+User Experience Considerations
+Visual Feedback: The graphs should provide clear feedback when users interact with them (e.g., highlighting a bar or line when tapped).
+
+Error Handling: If there is no data for a particular graph (e.g., no transactions for a given period), the graph should show a friendly message like "No data available" with a placeholder.
+
+Responsive Design: Ensure that all graphs look good on all screen sizes, from phones to larger tablets, by making them responsive.
+
+Conclusion
+The dashboard page will have scrollable cards at the top, each containing a different graph that gives the user valuable insights into their financial health. By using a combination of line graphs, bar charts, Sankey diagrams, and pie charts, we create a visually appealing and interactive experience that allows users to easily understand their spending, budget allocation, income, and account balances. This layout makes it easy to track financial data, visualize trends, and make informed decisions.

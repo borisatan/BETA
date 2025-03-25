@@ -68,28 +68,47 @@ export class AccountService {
         throw new Error('User not authenticated');
       }
 
+      const batch = writeBatch(db);
+
       // Create recurring income document
-      const recurringIncomeRef = await addDoc(collection(db, this.recurringIncomeCollection), {
+      const recurringIncomeRef = doc(collection(db, this.recurringIncomeCollection));
+      const now = Timestamp.now();
+      const recurringIncomeData = {
         ...recurringIncome,
         userId,
         accountId,
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now()
-      });
+        createdAt: now,
+        updatedAt: now
+      };
+      batch.set(recurringIncomeRef, recurringIncomeData);
 
-      // Add recurring income reference to account
+      // Create initial transaction for the recurring income
+      const transactionRef = doc(collection(db, 'transactions'));
+      const transactionData = {
+        userId,
+        amount: recurringIncome.amount,
+        description: `${recurringIncome.description} (Recurring)`,
+        accountId,
+        categoryId: '', // You might want to create a special income category
+        date: now,
+        transactionType: 'income',
+        createdAt: now,
+        updatedAt: now
+      };
+      batch.set(transactionRef, transactionData);
+
+      // Update account balance and add recurring income reference
       const accountRef = doc(db, this.collection, accountId);
-      await updateDoc(accountRef, {
+      batch.update(accountRef, {
+        balance: increment(recurringIncome.amount),
         recurringIncomes: arrayUnion({
           id: recurringIncomeRef.id,
-          ...recurringIncome,
-          userId,
-          accountId,
-          createdAt: Timestamp.now(),
-          updatedAt: Timestamp.now()
-        })
+          ...recurringIncomeData
+        }),
+        updatedAt: now
       });
 
+      await batch.commit();
       return recurringIncomeRef.id;
     } catch (error) {
       console.error('Error adding recurring income:', error);
@@ -228,6 +247,80 @@ export class AccountService {
       await batch.commit();
     } catch (error) {
       console.error('Error adding income:', error);
+      throw error;
+    }
+  }
+
+  static async processRecurringIncome(recurringIncomeId: string): Promise<void> {
+    try {
+      const userId = auth.currentUser?.uid;
+      if (!userId) {
+        throw new Error('User not authenticated');
+      }
+
+      // Get the recurring income
+      const recurringIncomeRef = doc(db, this.recurringIncomeCollection, recurringIncomeId);
+      const recurringIncomeDoc = await getDoc(recurringIncomeRef);
+      if (!recurringIncomeDoc.exists()) {
+        throw new Error('Recurring income not found');
+      }
+
+      const recurringIncome = recurringIncomeDoc.data() as RecurringIncome;
+      const batch = writeBatch(db);
+
+      // Create transaction for the recurring income
+      const transactionRef = doc(collection(db, 'transactions'));
+      const transactionData = {
+        userId,
+        amount: recurringIncome.amount,
+        description: `${recurringIncome.description} (Recurring)`,
+        accountId: recurringIncome.accountId,
+        categoryId: '', // You might want to create a special income category
+        date: serverTimestamp(),
+        transactionType: 'income',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      };
+      batch.set(transactionRef, transactionData);
+
+      // Update account balance
+      const accountRef = doc(db, this.collection, recurringIncome.accountId);
+      batch.update(accountRef, {
+        balance: increment(recurringIncome.amount),
+        updatedAt: serverTimestamp()
+      });
+
+      // Calculate and update next recurrence date
+      const currentDate = new Date();
+      let nextDate = new Date(currentDate);
+
+      switch (recurringIncome.recurrenceType) {
+        case 'daily':
+          nextDate.setDate(currentDate.getDate() + 1);
+          break;
+        case 'weekly':
+          nextDate.setDate(currentDate.getDate() + 7);
+          break;
+        case 'biweekly':
+          nextDate.setDate(currentDate.getDate() + 14);
+          break;
+        case 'monthly':
+          nextDate.setMonth(currentDate.getMonth() + 1);
+          break;
+        case 'custom':
+          nextDate.setMonth(currentDate.getMonth() + (recurringIncome.recurrenceInterval || 1));
+          break;
+      }
+
+      // Update the recurring income with new next recurrence date
+      batch.update(recurringIncomeRef, {
+        nextRecurrenceDate: Timestamp.fromDate(nextDate),
+        updatedAt: serverTimestamp()
+      });
+
+      await batch.commit();
+    } catch (error) {
+      console.error('Error processing recurring income:', error);
       throw error;
     }
   }

@@ -1,3 +1,0 @@
-updating accounts => should be able to update recurring income
-I need you to show all recurring income that has been added, and the ability to change it, whenever an account card is clicked in edit mode
-Add an indicator next in each accoutn card to indicate that the page is in edit mode

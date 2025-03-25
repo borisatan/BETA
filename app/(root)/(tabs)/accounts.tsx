@@ -10,6 +10,18 @@ import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Timestamp } from 'firebase/firestore';
 
+// Add the number formatting helper function
+const formatNumber = (value: string | number): string => {
+  // If it's a number, convert to string first
+  const stringValue = typeof value === 'number' ? value.toString() : value;
+  // Split the string into integer and decimal parts
+  const [integerPart, decimalPart] = stringValue.split('.');
+  // Add thousand separators to the integer part
+  const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  // Return the formatted number with decimal part if it exists
+  return decimalPart ? `${formattedInteger}.${decimalPart}` : formattedInteger;
+};
+
 const Accounts = () => {
   const router = useRouter();
   const { isDarkMode } = useTheme();
@@ -255,11 +267,11 @@ const Accounts = () => {
 
   const handleAddIncome = async () => {
     try {
-      if (!selectedAccount || !incomeAmount || !incomeDescription) {
+      if (!selectedAccount || !incomeAmount) {
         Toast.show({
           type: 'error',
           text1: 'Error',
-          text2: 'Please fill in all fields',
+          text2: 'Please enter an amount',
           position: 'bottom'
         });
         return;
@@ -269,7 +281,7 @@ const Accounts = () => {
         // Add recurring income
         await AccountService.addRecurringIncome(selectedAccount.id, {
           amount: parseFloat(incomeAmount),
-          description: incomeDescription,
+          description: incomeDescription || 'Recurring Income',
           recurrenceType: incomeRecurrenceType,
           recurrenceInterval: parseInt(incomeRecurrenceInterval),
           nextRecurrenceDate: Timestamp.fromDate(new Date())
@@ -285,7 +297,7 @@ const Accounts = () => {
         // Add one-time income
         await AccountService.addIncome(selectedAccount.id, {
           amount: parseFloat(incomeAmount),
-          description: incomeDescription
+          description: incomeDescription || 'Income'
         });
 
         Toast.show({
@@ -679,7 +691,7 @@ const Accounts = () => {
                         ? (isDarkMode ? "text-green-400" : "text-green-600")
                         : (isDarkMode ? "text-red-400" : "text-red-600")
                     }`}>
-                      {account.currency} {account.balance.toFixed(2)}
+                      {account.currency} {formatNumber(account.balance.toFixed(2))}
                     </Text>
                     {isEditMode && (
                       <TouchableOpacity 
@@ -869,7 +881,7 @@ const Accounts = () => {
                     )}
                   </View>
 
-                  {/* Recurring Income Section */}
+                  {/* Recurrence Income Section */}
                   <View className="mb-4">
                     <Text className={`text-lg font-semibold mb-4 ${isDarkMode ? "text-gray-200" : "text-gray-900"}`}>
                       Recurring Income
@@ -887,7 +899,7 @@ const Accounts = () => {
                               <Text className={`font-semibold ${
                                 isDarkMode ? "text-gray-200" : "text-gray-900"
                               }`}>
-                                ${income.amount.toFixed(2)}
+                                ${formatNumber(income.amount.toFixed(2))}
                               </Text>
                               <View className="flex-row">
                                 <TouchableOpacity
@@ -1003,7 +1015,7 @@ const Accounts = () => {
                       <Text className={`font-semibold ${
                         isDarkMode ? "text-gray-200" : "text-gray-900"
                       }`}>
-                        ${income.amount.toFixed(2)}
+                        ${formatNumber(income.amount.toFixed(2))}
                       </Text>
                       <View className="flex-row">
                         <TouchableOpacity
@@ -1094,25 +1106,44 @@ const Accounts = () => {
                 <Text className={`text-sm mb-1 ${
                   isDarkMode ? "text-gray-300" : "text-gray-700"
                 }`}>
-                  Recurrence
+                  Income Type
                 </Text>
-                <TouchableOpacity
-                  onPress={() => {
-                    setIsRecurringIncome(!isRecurringIncome);
-                    setShowRecurrenceOptions(!isRecurringIncome);
-                  }}
-                  className={`p-4 rounded-lg ${
-                    isRecurringIncome
-                      ? (isDarkMode ? "bg-[#1E40AF]" : "bg-[#1E3A8A]")
-                      : (isDarkMode ? "bg-gray-700" : "bg-gray-100")
-                  }`}
-                >
-                  <Text className={`text-center ${
-                    isRecurringIncome ? "text-white" : (isDarkMode ? "text-gray-200" : "text-gray-900")
-                  }`}>
-                    {isRecurringIncome ? 'Recurring Income' : 'One-time Income'}
-                  </Text>
-                </TouchableOpacity>
+                <View className="flex-row">
+                  <TouchableOpacity
+                    onPress={() => {
+                      setIsRecurringIncome(false);
+                      setShowRecurrenceOptions(false);
+                    }}
+                    className={`flex-1 p-3 rounded-l-lg ${
+                      !isRecurringIncome
+                        ? (isDarkMode ? "bg-[#1E40AF]" : "bg-[#1E3A8A]")
+                        : (isDarkMode ? "bg-gray-700" : "bg-gray-100")
+                    }`}
+                  >
+                    <Text className={`text-center ${
+                      !isRecurringIncome ? "text-white" : (isDarkMode ? "text-gray-200" : "text-gray-900")
+                    }`}>
+                      One-time
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setIsRecurringIncome(true);
+                      setShowRecurrenceOptions(true);
+                    }}
+                    className={`flex-1 p-3 rounded-r-lg ${
+                      isRecurringIncome
+                        ? (isDarkMode ? "bg-[#1E40AF]" : "bg-[#1E3A8A]")
+                        : (isDarkMode ? "bg-gray-700" : "bg-gray-100")
+                    }`}
+                  >
+                    <Text className={`text-center ${
+                      isRecurringIncome ? "text-white" : (isDarkMode ? "text-gray-200" : "text-gray-900")
+                    }`}>
+                      Recurring
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
 
               {/* Recurrence Options */}

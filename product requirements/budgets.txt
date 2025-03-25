@@ -183,4 +183,3 @@ Non-Uniform Category Distribution: If a user starts with unequal distribution (e
 Adding or Removing Categories: If the user adds or removes a category, the pie chart should adjust to reflect the new number of categories, recalculating the allocation for each one.
 
 Negative Allocations: Prevent the user from assigning a negative value to any category.
-
