@@ -6,7 +6,8 @@ import { auth } from '../firebase/firebaseConfig';
 import { Timestamp } from 'firebase/firestore';
 import Toast from 'react-native-toast-message';
 import { MaterialIcons } from '@expo/vector-icons';
-import { CategoryService, Category } from '../services/categoryService';
+import { CategoryService, Category, MainCategory } from '../services/categoryService';
+import Slider from '@react-native-community/slider';
 
 const availableIcons: string[] = [
   'shopping-cart',
@@ -66,7 +67,7 @@ interface Budget {
 const Budgets = () => {
   const { isDarkMode } = useTheme();
   const [budgets, setBudgets] = useState<Budget[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [mainCategories, setMainCategories] = useState<MainCategory[]>([]);
   const [showAddBudget, setShowAddBudget] = useState(false);
   const [editingBudget, setEditingBudget] = useState<Budget | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -94,13 +95,14 @@ const Budgets = () => {
   const [showAddMainCategory, setShowAddMainCategory] = useState(false);
   const [newMainCategoryName, setNewMainCategoryName] = useState('');
   const [newMainCategoryIcon, setNewMainCategoryIcon] = useState('priority-high');
-  const [editingMainCategory, setEditingMainCategory] = useState<Category | null>(null);
+  const [editingMainCategory, setEditingMainCategory] = useState<MainCategory | null>(null);
   const [showEmojiInput, setShowEmojiInput] = useState(false);
   const [emojiInput, setEmojiInput] = useState('');
+  const [allocationType, setAllocationType] = useState<'amount' | 'percentage'>('amount');
 
   useEffect(() => {
     fetchBudgets();
-    fetchCategories();
+    fetchMainCategories();
   }, []);
 
   const fetchBudgets = async () => {
@@ -130,14 +132,14 @@ const Budgets = () => {
     }
   };
 
-  const fetchCategories = async () => {
+  const fetchMainCategories = async () => {
     try {
       const userId = auth.currentUser?.uid;
       if (!userId) return;
-      const userCategories = await CategoryService.getUserCategories(userId);
-      setCategories(userCategories);
+      const userMainCategories = await CategoryService.getUserMainCategories(userId);
+      setMainCategories(userMainCategories);
     } catch (error) {
-      console.error('Error fetching categories:', error);
+      console.error('Error fetching main categories:', error);
     }
   };
 
@@ -177,18 +179,22 @@ const Budgets = () => {
   const handleHelpMeDecide = () => {
     setShowHelpMeDecide(false);
     // Get main categories (Needs, Wants, Savings)
-    const mainCategories = categories.filter(cat => 
+    const defaultMainCategories = mainCategories.filter((cat: MainCategory) => 
       ['Needs', 'Wants', 'Savings'].includes(cat.name)
     );
 
-    if (mainCategories.length === 3) {
+    if (defaultMainCategories.length === 3) {
       const totalAmount = parseFloat(budgetAmount) || 0;
       const allocations: { [key: string]: string } = {};
       
       // Apply 50/30/20 split
-      allocations[mainCategories.find(cat => cat.name === 'Needs')!.id] = (totalAmount * 0.5).toString();
-      allocations[mainCategories.find(cat => cat.name === 'Wants')!.id] = (totalAmount * 0.3).toString();
-      allocations[mainCategories.find(cat => cat.name === 'Savings')!.id] = (totalAmount * 0.2).toString();
+      const needsCategory = defaultMainCategories.find((cat: MainCategory) => cat.name === 'Needs');
+      const wantsCategory = defaultMainCategories.find((cat: MainCategory) => cat.name === 'Wants');
+      const savingsCategory = defaultMainCategories.find((cat: MainCategory) => cat.name === 'Savings');
+      
+      if (needsCategory) allocations[needsCategory.id] = (totalAmount * 0.5).toString();
+      if (wantsCategory) allocations[wantsCategory.id] = (totalAmount * 0.3).toString();
+      if (savingsCategory) allocations[savingsCategory.id] = (totalAmount * 0.2).toString();
       
       setCategoryAllocations(allocations);
     }
@@ -401,6 +407,70 @@ const Budgets = () => {
   const calculateProgress = (budget: Budget) => {
     const totalSpent = budget.categories.reduce((sum, cat) => sum + cat.spent, 0);
     return (totalSpent / budget.amount) * 100;
+  };
+
+  const handleSaveMainCategory = async () => {
+    if (!newMainCategoryName.trim()) {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Please enter a main category name'
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const userId = auth.currentUser?.uid;
+      if (!userId) {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'You must be logged in to manage main categories'
+        });
+        return;
+      }
+
+      if (editingMainCategory) {
+        await CategoryService.updateMainCategory(editingMainCategory.id, {
+          name: newMainCategoryName,
+          icon: newMainCategoryIcon
+        });
+        Toast.show({
+          type: 'success',
+          text1: 'Success',
+          text2: 'Main category updated successfully'
+        });
+      } else {
+        await CategoryService.createMainCategory({
+          name: newMainCategoryName,
+          icon: newMainCategoryIcon,
+          userId,
+          order: mainCategories.length
+        });
+        Toast.show({
+          type: 'success',
+          text1: 'Success',
+          text2: 'Main category added successfully'
+        });
+      }
+      setShowMainCategoryModal(false);
+      setEditingMainCategory(null);
+      setNewMainCategoryName('');
+      setNewMainCategoryIcon('priority-high');
+      setShowEmojiInput(false);
+      setEmojiInput('');
+      await fetchMainCategories();
+    } catch (error) {
+      console.error('Error saving main category:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: error instanceof Error ? error.message : 'Failed to save main category'
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -808,106 +878,270 @@ const Budgets = () => {
                           <Text className="text-white text-sm">Add Category</Text>
                         </TouchableOpacity>
                       </View>
-                      {categories.map((category) => (
-                        <View key={category.id} className="mb-4">
-                          <View className="flex-row justify-between items-center mb-2">
-                            <View className="flex-row items-center">
-                              {category.icon.length <= 2 ? (
-                                <Text style={{ fontSize: 20 }}>{category.icon}</Text>
-                              ) : (
-                                <MaterialIcons 
-                                  name={category.icon as any} 
-                                  size={20} 
-                                  color={isDarkMode ? "#E5E7EB" : "#1F2937"} 
-                                />
-                              )}
-                              <Text className={`ml-2 text-sm font-medium ${
-                                isDarkMode ? "text-gray-200" : "text-gray-900"
-                              }`}>
-                                {category.name}
-                              </Text>
-                            </View>
-                            <View className="flex-row">
-                              <TouchableOpacity
-                                onPress={() => {
-                                  setEditingMainCategory(category);
-                                  setNewMainCategoryName(category.name);
-                                  if (category.icon.length <= 2) {
-                                    setShowEmojiInput(true);
-                                    setEmojiInput(category.icon);
-                                  } else {
-                                    setShowEmojiInput(false);
-                                    setNewMainCategoryIcon(category.icon);
-                                  }
-                                  setShowMainCategoryModal(true);
+
+                      {/* Allocation Type Toggle */}
+                      <View className="flex-row mb-4">
+                        <TouchableOpacity
+                          onPress={() => setAllocationType('amount')}
+                          className={`flex-1 p-3 rounded-l-lg ${
+                            allocationType === 'amount'
+                              ? (isDarkMode ? "bg-[#1E40AF]" : "bg-[#1E3A8A]")
+                              : (isDarkMode ? "bg-gray-700" : "bg-gray-100")
+                          }`}
+                        >
+                          <Text className={`text-center ${
+                            allocationType === 'amount' ? "text-white" : (isDarkMode ? "text-gray-200" : "text-gray-900")
+                          }`}>
+                            Amount
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => setAllocationType('percentage')}
+                          className={`flex-1 p-3 rounded-r-lg ${
+                            allocationType === 'percentage'
+                              ? (isDarkMode ? "bg-[#1E40AF]" : "bg-[#1E3A8A]")
+                              : (isDarkMode ? "bg-gray-700" : "bg-gray-100")
+                          }`}
+                        >
+                          <Text className={`text-center ${
+                            allocationType === 'percentage' ? "text-white" : (isDarkMode ? "text-gray-200" : "text-gray-900")
+                          }`}>
+                            Percentage
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      {allocationType === 'percentage' ? (
+                        <View className="space-y-6">
+                          {/* Percentage Sliders */}
+                          {mainCategories.map((category, index) => (
+                            <View key={category.id} className="space-y-2">
+                              <View className="flex-row justify-between items-center">
+                                <View className="flex-row items-center">
+                                  {category.icon.length <= 2 ? (
+                                    <Text style={{ fontSize: 20 }}>{category.icon}</Text>
+                                  ) : (
+                                    <MaterialIcons 
+                                      name={category.icon as any} 
+                                      size={20} 
+                                      color={isDarkMode ? "#E5E7EB" : "#1F2937"} 
+                                    />
+                                  )}
+                                  <Text className={`ml-2 text-sm font-medium ${
+                                    isDarkMode ? "text-gray-200" : "text-gray-900"
+                                  }`}>
+                                    {category.name}
+                                  </Text>
+                                </View>
+                                <Text className={`text-sm font-medium ${
+                                  isDarkMode ? "text-gray-200" : "text-gray-900"
+                                }`}>
+                                  {categoryAllocations[category.id] || 0}%
+                                </Text>
+                              </View>
+                              <Slider
+                                value={parseFloat(categoryAllocations[category.id] || '0')}
+                                onValueChange={(value: number) => {
+                                  const newAllocations = { ...categoryAllocations };
+                                  newAllocations[category.id] = value.toString();
+                                  setCategoryAllocations(newAllocations);
+                                  
+                                  // Update amount allocations
+                                  const totalAmount = parseFloat(budgetAmount) || 0;
+                                  const amountAllocations = { ...mainCategoryAllocations };
+                                  amountAllocations[category.id] = ((value / 100) * totalAmount).toString();
+                                  setMainCategoryAllocations(amountAllocations);
                                 }}
-                                className="mr-4"
-                              >
-                                <MaterialIcons 
-                                  name="edit" 
-                                  size={20} 
-                                  color={isDarkMode ? "#E5E7EB" : "#1F2937"} 
-                                />
-                              </TouchableOpacity>
-                              <TouchableOpacity
-                                onPress={() => {
-                                  Alert.alert(
-                                    'Delete Category',
-                                    'Are you sure you want to delete this category?',
-                                    [
-                                      { text: 'Cancel', style: 'cancel' },
-                                      {
-                                        text: 'Delete',
-                                        style: 'destructive',
-                                        onPress: async () => {
-                                          try {
-                                            await CategoryService.deleteMainCategory(category.id);
-                                            Toast.show({
-                                              type: 'success',
-                                              text1: 'Success',
-                                              text2: 'Main category deleted successfully'
-                                            });
-                                            fetchBudgets();
-                                          } catch (error) {
-                                            console.error('Error deleting main category:', error);
-                                            Toast.show({
-                                              type: 'error',
-                                              text1: 'Error',
-                                              text2: 'Failed to delete main category'
-                                            });
-                                          }
+                                minimumValue={0}
+                                maximumValue={100}
+                                step={1}
+                                minimumTrackTintColor={isDarkMode ? "#1E40AF" : "#1E3A8A"}
+                                maximumTrackTintColor={isDarkMode ? "#374151" : "#D1D5DB"}
+                                thumbTintColor={isDarkMode ? "#1E40AF" : "#1E3A8A"}
+                              />
+                            </View>
+                          ))}
+
+                          {/* Percentage Inputs */}
+                          <View className="space-y-4">
+                            {mainCategories.map((category) => (
+                              <View key={category.id} className="flex-row items-center space-x-4">
+                                <View className="flex-1">
+                                  <TextInput
+                                    value={categoryAllocations[category.id] || ''}
+                                    onChangeText={(text) => {
+                                      const value = text.replace(/[^0-9]/g, '');
+                                      if (value === '' || (parseFloat(value) >= 0 && parseFloat(value) <= 100)) {
+                                        const newAllocations = { ...categoryAllocations };
+                                        newAllocations[category.id] = value;
+                                        setCategoryAllocations(newAllocations);
+                                        
+                                        // Update amount allocations
+                                        const totalAmount = parseFloat(budgetAmount) || 0;
+                                        const amountAllocations = { ...mainCategoryAllocations };
+                                        amountAllocations[category.id] = ((parseFloat(value) / 100) * totalAmount).toString();
+                                        setMainCategoryAllocations(amountAllocations);
+                                      }
+                                    }}
+                                    placeholder="0"
+                                    keyboardType="numeric"
+                                    className={`p-4 rounded-lg ${
+                                      isDarkMode 
+                                        ? "bg-gray-700 text-gray-200" 
+                                        : "bg-gray-100 text-gray-900"
+                                    }`}
+                                  />
+                                </View>
+                                <Text className={`text-sm font-medium ${
+                                  isDarkMode ? "text-gray-200" : "text-gray-900"
+                                }`}>
+                                  %
+                                </Text>
+                                <View className="flex-1">
+                                  <TextInput
+                                    value={mainCategoryAllocations[category.id] || ''}
+                                    onChangeText={(text) => {
+                                      const value = text.replace(/[^0-9.]/g, '');
+                                      if (value === '' || parseFloat(value) >= 0) {
+                                        const amountAllocations = { ...mainCategoryAllocations };
+                                        amountAllocations[category.id] = value;
+                                        setMainCategoryAllocations(amountAllocations);
+                                        
+                                        // Update percentage allocations
+                                        const totalAmount = parseFloat(budgetAmount) || 0;
+                                        if (totalAmount > 0) {
+                                          const newAllocations = { ...categoryAllocations };
+                                          newAllocations[category.id] = ((parseFloat(value) / totalAmount) * 100).toString();
+                                          setCategoryAllocations(newAllocations);
                                         }
                                       }
-                                    ]
-                                  );
-                                }}
-                              >
-                                <MaterialIcons 
-                                  name="delete" 
-                                  size={20} 
-                                  color={isDarkMode ? "#EF4444" : "#B91C1C"} 
-                                />
-                              </TouchableOpacity>
-                            </View>
+                                    }}
+                                    placeholder="0"
+                                    keyboardType="numeric"
+                                    className={`p-4 rounded-lg ${
+                                      isDarkMode 
+                                        ? "bg-gray-700 text-gray-200" 
+                                        : "bg-gray-100 text-gray-900"
+                                    }`}
+                                  />
+                                </View>
+                              </View>
+                            ))}
                           </View>
-                          <TextInput
-                            value={mainCategoryAllocations[category.id] || ''}
-                            onChangeText={(text) => {
-                              setMainCategoryAllocations(prev => ({
-                                ...prev,
-                                [category.id]: text
-                              }));
-                            }}
-                            placeholder="Enter amount or percentage"
-                            keyboardType="numeric"
-                            className={`p-4 rounded-lg ${
-                              isDarkMode 
-                                ? "bg-gray-700 text-gray-200" 
-                                : "bg-gray-100 text-gray-900"
-                            }`}
-                          />
                         </View>
-                      ))}
+                      ) : (
+                        // Amount-based allocations
+                        mainCategories.map((category) => (
+                          <View key={category.id} className="mb-4">
+                            <View className="flex-row justify-between items-center mb-2">
+                              <View className="flex-row items-center">
+                                {category.icon.length <= 2 ? (
+                                  <Text style={{ fontSize: 20 }}>{category.icon}</Text>
+                                ) : (
+                                  <MaterialIcons 
+                                    name={category.icon as any} 
+                                    size={20} 
+                                    color={isDarkMode ? "#E5E7EB" : "#1F2937"} 
+                                  />
+                                )}
+                                <Text className={`ml-2 text-sm font-medium ${
+                                  isDarkMode ? "text-gray-200" : "text-gray-900"
+                                }`}>
+                                  {category.name}
+                                </Text>
+                              </View>
+                              <View className="flex-row">
+                                <TouchableOpacity
+                                  onPress={() => {
+                                    setEditingMainCategory(category);
+                                    setNewMainCategoryName(category.name);
+                                    if (category.icon.length <= 2) {
+                                      setShowEmojiInput(true);
+                                      setEmojiInput(category.icon);
+                                    } else {
+                                      setShowEmojiInput(false);
+                                      setNewMainCategoryIcon(category.icon);
+                                    }
+                                    setShowMainCategoryModal(true);
+                                  }}
+                                  className="mr-4"
+                                >
+                                  <MaterialIcons 
+                                    name="edit" 
+                                    size={20} 
+                                    color={isDarkMode ? "#E5E7EB" : "#1F2937"} 
+                                  />
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  onPress={() => {
+                                    Alert.alert(
+                                      'Delete Category',
+                                      'Are you sure you want to delete this category?',
+                                      [
+                                        { text: 'Cancel', style: 'cancel' },
+                                        {
+                                          text: 'Delete',
+                                          style: 'destructive',
+                                          onPress: async () => {
+                                            try {
+                                              await CategoryService.deleteMainCategory(category.id);
+                                              Toast.show({
+                                                type: 'success',
+                                                text1: 'Success',
+                                                text2: 'Main category deleted successfully'
+                                              });
+                                              fetchMainCategories();
+                                            } catch (error) {
+                                              console.error('Error deleting main category:', error);
+                                              Toast.show({
+                                                type: 'error',
+                                                text1: 'Error',
+                                                text2: 'Failed to delete main category'
+                                              });
+                                            }
+                                          }
+                                        }
+                                      ]
+                                    );
+                                  }}
+                                >
+                                  <MaterialIcons 
+                                    name="delete" 
+                                    size={20} 
+                                    color={isDarkMode ? "#EF4444" : "#B91C1C"} 
+                                  />
+                                </TouchableOpacity>
+                              </View>
+                            </View>
+                            <TextInput
+                              value={mainCategoryAllocations[category.id] || ''}
+                              onChangeText={(text) => {
+                                const value = text.replace(/[^0-9.]/g, '');
+                                if (value === '' || parseFloat(value) >= 0) {
+                                  const amountAllocations = { ...mainCategoryAllocations };
+                                  amountAllocations[category.id] = value;
+                                  setMainCategoryAllocations(amountAllocations);
+                                  
+                                  // Update percentage allocations
+                                  const totalAmount = parseFloat(budgetAmount) || 0;
+                                  if (totalAmount > 0) {
+                                    const newAllocations = { ...categoryAllocations };
+                                    newAllocations[category.id] = ((parseFloat(value) / totalAmount) * 100).toString();
+                                    setCategoryAllocations(newAllocations);
+                                  }
+                                }
+                              }}
+                              placeholder="Enter amount"
+                              keyboardType="numeric"
+                              className={`p-4 rounded-lg ${
+                                isDarkMode 
+                                  ? "bg-gray-700 text-gray-200" 
+                                  : "bg-gray-100 text-gray-900"
+                              }`}
+                            />
+                          </View>
+                        ))
+                      )}
                     </View>
                   )}
                 </View>
@@ -1250,69 +1484,7 @@ const Budgets = () => {
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    onPress={async () => {
-                      if (!newMainCategoryName.trim()) {
-                        Toast.show({
-                          type: 'error',
-                          text1: 'Error',
-                          text2: 'Please enter a main category name'
-                        });
-                        return;
-                      }
-
-                      setIsLoading(true);
-                      try {
-                        const userId = auth.currentUser?.uid;
-                        if (!userId) {
-                          Toast.show({
-                            type: 'error',
-                            text1: 'Error',
-                            text2: 'You must be logged in to manage main categories'
-                          });
-                          return;
-                        }
-
-                        if (editingMainCategory) {
-                          await CategoryService.updateMainCategory(editingMainCategory.id, {
-                            name: newMainCategoryName,
-                            icon: newMainCategoryIcon
-                          });
-                          Toast.show({
-                            type: 'success',
-                            text1: 'Success',
-                            text2: 'Main category updated successfully'
-                          });
-                        } else {
-                          await CategoryService.createMainCategory({
-                            name: newMainCategoryName,
-                            icon: newMainCategoryIcon,
-                            userId,
-                            order: categories.length
-                          });
-                          Toast.show({
-                            type: 'success',
-                            text1: 'Success',
-                            text2: 'Main category added successfully'
-                          });
-                        }
-                        setShowMainCategoryModal(false);
-                        setEditingMainCategory(null);
-                        setNewMainCategoryName('');
-                        setNewMainCategoryIcon('priority-high');
-                        setShowEmojiInput(false);
-                        setEmojiInput('');
-                        await fetchBudgets();
-                      } catch (error) {
-                        console.error('Error saving main category:', error);
-                        Toast.show({
-                          type: 'error',
-                          text1: 'Error',
-                          text2: error instanceof Error ? error.message : 'Failed to save main category'
-                        });
-                      } finally {
-                        setIsLoading(false);
-                      }
-                    }}
+                    onPress={handleSaveMainCategory}
                     disabled={isLoading}
                     className={`flex-1 ml-2 p-4 rounded-lg ${
                       isLoading 

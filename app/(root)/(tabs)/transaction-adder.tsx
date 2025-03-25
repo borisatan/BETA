@@ -174,9 +174,9 @@ const TransactionAdder = () => {
         type: 'error',
         text1: 'Error',
         text2: 'Please fill in all required fields'
-      });
-      return;
-    }
+        });
+        return;
+      }
 
     try {
       const transaction: Omit<Transaction, 'id'> = {
@@ -268,7 +268,7 @@ const TransactionAdder = () => {
                 text2: 'Category deleted successfully'
               });
               fetchCategories();
-            } catch (error) {
+      } catch (error) {
               console.error('Error deleting category:', error);
               Toast.show({
                 type: 'error',
@@ -498,7 +498,7 @@ const TransactionAdder = () => {
               <ActivityIndicator size="small" color={isDarkMode ? "#1E40AF" : "#1E3A8A"} />
               <Text className={`mt-2 text-sm ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}>
                 Loading accounts...
-              </Text>
+          </Text>
             </View>
           ) : (
             <ScrollView 
@@ -520,8 +520,8 @@ const TransactionAdder = () => {
                     selectedAccount === account.id ? "text-white" : (isDarkMode ? "text-gray-200" : "text-gray-900")
                   }`}>
                     {account.name}
-                  </Text>
-                </TouchableOpacity>
+              </Text>
+            </TouchableOpacity>
               ))}
             </ScrollView>
           )}
@@ -542,7 +542,7 @@ const TransactionAdder = () => {
             className="px-6 mb-6"
           >
             {mainCategories.map((category) => (
-              <TouchableOpacity 
+            <TouchableOpacity 
                 key={category.id}
                 onPress={() => handleMainCategorySelect(category.name)}
                 className={`mr-4 px-4 py-2 rounded-lg flex-row items-center ${
@@ -701,7 +701,7 @@ const TransactionAdder = () => {
                               </TouchableOpacity>
                               <TouchableOpacity onPress={() => handleDeleteCategory(category)}>
                                 <MaterialIcons name="delete" size={20} color={isDarkMode ? "#EF4444" : "#B91C1C"} />
-                              </TouchableOpacity>
+            </TouchableOpacity>
                             </View>
                           </View>
                         ))}
@@ -710,7 +710,7 @@ const TransactionAdder = () => {
                 </View>
 
                 {/* Add New Category Button */}
-                <TouchableOpacity
+            <TouchableOpacity 
                   onPress={handleAddCategory}
                   className={`p-4 rounded-lg flex-row items-center justify-center mb-6 ${
                     isDarkMode ? "bg-[#1E40AF]" : "bg-[#1E3A8A]"
@@ -719,8 +719,8 @@ const TransactionAdder = () => {
                   <MaterialIcons name="add" size={24} color="white" />
                   <Text className="ml-2 text-white font-semibold">
                     Add New Category
-                  </Text>
-                </TouchableOpacity>
+              </Text>
+            </TouchableOpacity>
               </View>
             </ScrollView>
           </View>
@@ -750,26 +750,26 @@ const TransactionAdder = () => {
                       color={isDarkMode ? "#E5E7EB" : "#1F2937"} 
                     />
                   </TouchableOpacity>
-                </View>
+        </View>
 
                 <View className="space-y-4">
-                  <View>
+          <View>
                     <Text className={`text-sm mb-1 ${
                       isDarkMode ? "text-gray-300" : "text-gray-700"
                     }`}>
                       Category Name
-                    </Text>
-                    <TextInput
+            </Text>
+            <TextInput
                       value={newCategoryName}
                       onChangeText={setNewCategoryName}
                       placeholder="Enter category name"
                       className={`p-4 rounded-lg ${
-                        isDarkMode 
+                isDarkMode 
                           ? "bg-gray-700 text-gray-200" 
                           : "bg-gray-100 text-gray-900"
-                      }`}
-                    />
-                  </View>
+              }`}
+            />
+          </View>
 
                   <View>
                     <Text className={`text-sm mb-1 ${
@@ -811,14 +811,14 @@ const TransactionAdder = () => {
                     </ScrollView>
                   </View>
 
-                  <View>
+          <View>
                     <Text className={`text-sm mb-1 ${
                       isDarkMode ? "text-gray-300" : "text-gray-700"
                     }`}>
                       Icon
-                    </Text>
+            </Text>
                     <View className="flex-row mb-2">
-                      <TouchableOpacity 
+            <TouchableOpacity 
                         onPress={() => setShowEmojiPicker(false)}
                         className={`flex-1 mr-2 p-3 rounded-lg ${
                           !showEmojiPicker
@@ -830,7 +830,7 @@ const TransactionAdder = () => {
                           !showEmojiPicker ? "text-white" : (isDarkMode ? "text-gray-200" : "text-gray-900")
                         }`}>
                           Material Icons
-                        </Text>
+              </Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         onPress={() => setShowEmojiPicker(true)}
@@ -844,12 +844,12 @@ const TransactionAdder = () => {
                           showEmojiPicker ? "text-white" : (isDarkMode ? "text-gray-200" : "text-gray-900")
                         }`}>
                           Emojis
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
+              </Text>
+            </TouchableOpacity>
+          </View>
 
                     {showEmojiPicker ? (
-                      <View>
+          <View>
                         <TextInput
                           value={emojiInput}
                           onChangeText={(text) => {
@@ -863,7 +863,7 @@ const TransactionAdder = () => {
                           returnKeyType="done"
                           onSubmitEditing={Keyboard.dismiss}
                           className={`p-4 mb-2 rounded-lg ${
-                            isDarkMode 
+              isDarkMode 
                               ? "bg-gray-700 text-gray-200" 
                               : "bg-gray-100 text-gray-900"
                           }`}
@@ -921,8 +921,8 @@ const TransactionAdder = () => {
                         </View>
                       </ScrollView>
                     )}
-                  </View>
-                </View>
+            </View>
+          </View>
 
                 <View className="flex-row justify-between mt-6">
                   <TouchableOpacity
@@ -935,7 +935,7 @@ const TransactionAdder = () => {
                       isDarkMode ? "text-gray-200" : "text-gray-900"
                     }`}>
                       Cancel
-                    </Text>
+            </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={handleSaveCategory}
@@ -951,7 +951,7 @@ const TransactionAdder = () => {
                     </Text>
                   </TouchableOpacity>
                 </View>
-              </View>
+            </View>
             </ScrollView>
           </View>
         </Modal>
@@ -980,26 +980,26 @@ const TransactionAdder = () => {
                       color={isDarkMode ? "#E5E7EB" : "#1F2937"} 
                     />
                   </TouchableOpacity>
-                </View>
+          </View>
 
                 <View className="space-y-4">
-                  <View>
+          <View>
                     <Text className={`text-sm mb-1 ${
                       isDarkMode ? "text-gray-300" : "text-gray-700"
                     }`}>
                       Main Category Name
-                    </Text>
-                    <TextInput
+            </Text>
+            <TextInput
                       value={newMainCategoryName}
                       onChangeText={setNewMainCategoryName}
                       placeholder="Enter main category name"
                       className={`p-4 rounded-lg ${
-                        isDarkMode 
+                isDarkMode 
                           ? "bg-gray-700 text-gray-200" 
                           : "bg-gray-100 text-gray-900"
                       }`}
-                    />
-                  </View>
+            />
+          </View>
 
                   <View>
                     <Text className={`text-sm mb-1 ${
@@ -1098,7 +1098,7 @@ const TransactionAdder = () => {
                       Cancel
                     </Text>
                   </TouchableOpacity>
-                  <TouchableOpacity
+          <TouchableOpacity 
                     onPress={handleSaveMainCategory}
                     disabled={isLoading}
                     className={`flex-1 ml-2 p-4 rounded-lg ${
@@ -1109,11 +1109,11 @@ const TransactionAdder = () => {
                   >
                     <Text className="text-white text-center">
                       {isLoading ? 'Saving...' : 'Save'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </ScrollView>
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </ScrollView>
           </View>
         </Modal>
 

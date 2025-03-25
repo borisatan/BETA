@@ -92,17 +92,95 @@ If they choose a simple budget, they won’t see categories in their budget brea
 
 
 
-Within the budgets page, the existing budgets should be displayed in a similar fashion as the accounts in the accounts page.
-The recurrance selector should look the exact same way as the one in the accounts page when adding income, both in the simple and category based budget makers
-When the user Selects category based budget, he should be prompted to choose: Custom or Help me decide. The prompt should have the same UI 
-as Choose budget type pop up. 
+Remove the  date selector for now. Whenever im allocating money to a category i want to have THE MAIN CATEGORIES THERE, meaning "Needs", wants savings.
 
+Goal:
+To create a circular pie chart that represents budget categories (such as Needs, Wants, Savings, etc.) and allows users to interactively adjust the allocation for each category. Each slice of the pie chart corresponds to a category, and the size of the slice should change dynamically based on user input.
 
-The recurrence type should also include the daily and biweekly options. 
-Creating a custom budget, should show under the category allocations, the main categories that the user has saved (by default needs wants savings),
-and the ability to allocate a certain precentage or certain amount of money to each main category, they should also have the option 
-to add or delete main categories (maybe take the functionality from the transaction adder page?).
-After clicking on Next, which should replace the save button, they will be prompted with if they want to allocate to specific subcategories, or just save the Budget
+Core Concepts:
+Dynamic Categories:
 
-Remove the category allocations help me decide option which currently stays below the recurence type in category based custom budget menu
+Variable Categories: The user can have more than three categories (e.g., Needs, Wants, Savings, Debt, Entertainment, etc.), and these categories are already stored in the database. The pie chart should retrieve these categories and their respective budget allocations dynamically and represent them as slices in the chart.
+
+Dynamic Allocation: The app will adjust the allocation (amount or percentage) for each category, and as the user interacts with the chart, the allocation should be updated in real-time.
+
+Circular Pie Chart:
+
+The chart will be circular with segments (slices) for each budget category. Each slice represents the proportion of the total budget allocated to that category.
+
+Each Segment:
+
+A segment corresponds to one category.
+
+The size of each segment is determined by the percentage of the total budget allocated to that category.
+
+Draggable Segments:
+
+Interaction: Users will be able to click and drag the edge of each slice to adjust the allocation for that category. As they drag the edge of a segment, the corresponding percentage or dollar amount will increase or decrease based on how much they move the slice.
+
+Real-Time Updates: As the user interacts with a segment, the app will immediately update the display to show the new allocation. If the allocation for one segment is increased, the other segments should adjust accordingly to maintain the total budget at 100%.
+
+Visual Feedback:
+
+Percentage/Dollar Amount Display: Each segment should display either the percentage or the dollar amount allocated to that category, so users can easily see how their budget is distributed.
+
+Total Budget: A "Total Budget" label should appear in the center of the pie chart. This label should update dynamically as users adjust the slices, reflecting the current total budget based on the updated allocations.
+
+Automatic Adjustments: When the user drags the edge of a slice, the other slices should shrink or grow in real-time to maintain the total budget allocation of 100%. If one segment is expanded (i.e., the user increases the budget for one category), the app should automatically shrink the other segments to keep the total sum at 100%.
+
+Error Handling:
+
+Overflow Prevention: Ensure that no individual slice can exceed the total 100% budget. For example, if a user drags one slice too far, the app should display a visual warning or prevent further expansion.
+
+Responsive Layout: The chart should be responsive, adjusting dynamically if the number of categories changes (e.g., if the user adds or removes categories).
+
+Implementation Steps:
+Dynamic Category Retrieval:
+
+The app should retrieve the categories and their respective budget allocations from Firebase. This data will be used to generate the slices of the pie chart.
+
+Firebase Structure:
+
+Each user’s budget data will be stored in a way that each category has an associated allocation (in percentage or dollar value).
+
+The app will query this data, dynamically creating slices based on the number of categories the user has.
+
+Rendering the Pie Chart:
+
+Rendering Logic: Based on the number of categories retrieved, the pie chart will dynamically create that many slices.
+
+Pie Chart Library: Use a library like react-native-svg or react-native-chart-kit to generate a circular pie chart. Each slice will represent a category.
+
+Each slice's size will be proportional to the percentage or dollar amount allocated to that category.
+
+As the user interacts with a slice, the app will update the allocation for that category and adjust the slices accordingly.
+
+Draggable Interactions:
+
+Slider Mechanism: Implement a draggable slider for each slice that will allow the user to change the allocation for that category.
+
+When the user drags the edge of a slice, update the corresponding percentage or dollar value in real-time.
+
+Update the allocations of all other categories so that the total budget always sums to 100%.
+
+Ensure that as a slice is increased or decreased, the pie chart updates smoothly, providing immediate feedback to the user.
+
+Total Budget:
+
+The total budget, displayed in the center of the pie chart, should dynamically update as the user interacts with the slices.
+
+Example: If the total budget is $1000 and the user adjusts the categories (e.g., increasing Needs from $300 to $400), the Total Budget label should immediately reflect the new values (e.g., "$1000 total budget").
+
+Handling User Input:
+
+Prevent Over-Allocation: If a user adjusts one category, ensure that the other categories are automatically resized to maintain the 100% allocation.
+
+Smooth Transitions: Use smooth animations to reflect changes in the pie chart as the user interacts with the segments.
+
+Edge Cases to Consider:
+Non-Uniform Category Distribution: If a user starts with unequal distribution (e.g., Needs = 50%, Wants = 30%, Savings = 20%), the chart should display these proportions correctly. When the user adjusts one category, the other categories should automatically adjust.
+
+Adding or Removing Categories: If the user adds or removes a category, the pie chart should adjust to reflect the new number of categories, recalculating the allocation for each one.
+
+Negative Allocations: Prevent the user from assigning a negative value to any category.
 

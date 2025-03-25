@@ -13,6 +13,7 @@ export interface Account extends Timestamps {
   balance: number;
   type: 'Checking' | 'Savings' | 'Cash' | 'Card';
   currency: string;
+  recurringIncomes?: RecurringIncome[];
 }
 
 export interface Transaction extends Timestamps {
@@ -64,4 +65,15 @@ export interface User {
     currency: string;
     language: string;
   };
+}
+
+export interface RecurringIncome extends Timestamps {
+  id: string;
+  userId: string;
+  accountId: string;
+  amount: number;
+  description: string;
+  recurrenceType: 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'custom';
+  recurrenceInterval: number;
+  nextRecurrenceDate: Timestamp;
 } 
