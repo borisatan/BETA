@@ -32,6 +32,12 @@ interface ChartData {
   }[];
 }
 
+interface DailySpending {
+  date: string;
+  amount: number;
+  transactions: Transaction[];
+}
+
 interface PieChartData {
   name: string;
   amount: number;
