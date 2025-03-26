@@ -47,22 +47,24 @@ interface ChartCardProps {
   onPress?: () => void;
 }
 
+interface TimeFrameData {
+  current: number[];
+  previous: number[];
+  labels: string[];
+}
+
 const ChartCard: React.FC<ChartCardProps> = ({ title, children, onPress }) => {
   const { isDarkMode } = useTheme();
 
   return (
     <TouchableOpacity
       onPress={onPress}
-      className={`p-4 rounded-xl mb-4 ${
+      className={`p-4 rounded-xl mb-4 w-full ${
         isDarkMode ? "bg-gray-800 shadow-lg" : "bg-white shadow-md"
       }`}
-      style={{
-        width: Dimensions.get("window").width - 40,
-        marginHorizontal: 20,
-      }}
     >
       <Text
-        className={`text-lg font-bold mb-4 ${
+        className={`text-lg font-bold mb-4 text-center ${
           isDarkMode ? "text-gray-200" : "text-gray-900"
         }`}
       >
@@ -81,24 +83,24 @@ const Dashboard = () => {
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [detailsData, setDetailsData] = useState<any>(null);
   const screenWidth = Dimensions.get("window").width;
+  const [timeFrame, setTimeFrame] = useState<
+    "week" | "month" | "6months" | "year"
+  >("month");
+  const [spendingOverTime, setSpendingOverTime] = useState<TimeFrameData>({
+    current: [],
+    previous: [],
+    labels: [],
+  });
+  const [averageSpending, setAverageSpending] = useState<ChartData>({
+    labels: [],
+    datasets: [{ data: [0] }, { data: [0] }],
+  });
 
   // Chart data states
-  const [spendingData, setSpendingData] = useState<ChartData>({
-    labels: [],
-    datasets: [{ data: [0] }, { data: [0] }],
-  });
-  const [categoryData, setCategoryData] = useState<ChartData>({
-    labels: [],
-    datasets: [{ data: [0] }],
-  });
   const [pieData, setPieData] = useState<PieChartData[]>([]);
-  const [accountData, setAccountData] = useState<ChartData>({
-    labels: [],
-    datasets: [{ data: [0] }, { data: [0] }],
-  });
 
   const chartConfig = {
-    backgroundColor: isDarkMode ? "#1F2937" : "#FFFFFF",
+    backgroundColor: "transparent",
     backgroundGradientFrom: isDarkMode ? "#1F2937" : "#FFFFFF",
     backgroundGradientTo: isDarkMode ? "#1F2937" : "#FFFFFF",
     decimalPlaces: 0,
@@ -114,16 +116,173 @@ const Dashboard = () => {
       borderRadius: 16,
     },
     propsForDots: {
-      r: "6",
-      strokeWidth: "2",
+      r: "4",
+      strokeWidth: "1",
       stroke: isDarkMode ? "#3B82F6" : "#1D4ED8",
     },
-    formatYLabel: (value: string) => Number(value).toFixed(0),
-    formatXLabel: (value: string) => value,
+    formatYLabel: (value: number) => Math.round(value).toString(),
     propsForBackgroundLines: {
-      strokeWidth: 1,
+      strokeDasharray: "", // solid background lines
       stroke: isDarkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)",
+      strokeWidth: 1,
     },
+  };
+
+  // Helper function to check if a date is within a range
+  const isWithinRange = (date: Date, start: Date, end: Date) => {
+    return date >= start && date <= end;
+  };
+
+  // Helper function to get date ranges based on timeFrame
+  const getDateRanges = (timeFrame: "week" | "month" | "6months" | "year") => {
+    const now = new Date();
+    let currentStart: Date,
+      currentEnd: Date,
+      previousStart: Date,
+      previousEnd: Date;
+
+    switch (timeFrame) {
+      case "week":
+        currentStart = new Date(now.setDate(now.getDate() - now.getDay()));
+        currentEnd = new Date(now.setDate(now.getDate() + 6));
+        previousStart = new Date(
+          new Date(currentStart).setDate(currentStart.getDate() - 7)
+        );
+        previousEnd = new Date(
+          new Date(currentEnd).setDate(currentEnd.getDate() - 7)
+        );
+        break;
+      case "month":
+        currentStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        currentEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        previousStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        previousEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+        break;
+      case "6months":
+        currentStart = new Date(now.getFullYear(), now.getMonth() - 6, 1);
+        currentEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        previousStart = new Date(now.getFullYear(), now.getMonth() - 12, 1);
+        previousEnd = new Date(now.getFullYear(), now.getMonth() - 6, 0);
+        break;
+      case "year":
+        currentStart = new Date(now.getFullYear(), 0, 1);
+        currentEnd = new Date(now.getFullYear(), 11, 31);
+        previousStart = new Date(now.getFullYear() - 1, 0, 1);
+        previousEnd = new Date(now.getFullYear() - 1, 11, 31);
+        break;
+    }
+
+    return { currentStart, currentEnd, previousStart, previousEnd };
+  };
+
+  // Helper function to get group key for transactions
+  const getGroupKey = (date: Date, timeFrame: string): string => {
+    switch (timeFrame) {
+      case "week":
+        return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][date.getDay()];
+      case "month":
+        return `Week ${Math.ceil(date.getDate() / 7)}`;
+      case "6months":
+        return date.toLocaleString("default", { month: "short" });
+      case "year":
+        return `Q${Math.floor(date.getMonth() / 3) + 1}`;
+      default:
+        return "";
+    }
+  };
+
+  // Helper function to aggregate transactions by period
+  const aggregateTransactionsByPeriod = (
+    transactions: Transaction[],
+    timeFrame: "week" | "month" | "6months" | "year"
+  ): number[] => {
+    const labels = getTimeFrameLabels(timeFrame);
+    const grouped = transactions.reduce(
+      (acc: { [key: string]: number }, transaction) => {
+        const date = (transaction.date as Timestamp).toDate();
+        const key = getGroupKey(date, timeFrame);
+        acc[key] = (acc[key] || 0) + Math.abs(transaction.amount);
+        return acc;
+      },
+      {}
+    );
+
+    return labels.map((label) => grouped[label] || 0);
+  };
+
+  // Helper function to calculate historical average
+  const calculateHistoricalAverage = (
+    transactions: Transaction[],
+    timeFrame: "week" | "month" | "6months" | "year"
+  ): number[] => {
+    const labels = getTimeFrameLabels(timeFrame);
+    // Calculate simple average for demonstration
+    const total = transactions.reduce((sum, t) => sum + Math.abs(t.amount), 0);
+    const average = total / transactions.length || 0;
+    return labels.map(() => average);
+  };
+
+  // Helper function to get color for pie chart
+  const getColorForIndex = (index: number): string => {
+    const colors = [
+      "#FF6384",
+      "#36A2EB",
+      "#FFCE56",
+      "#4BC0C0",
+      "#9966FF",
+      "#FF9F40",
+      "#FF6384",
+    ];
+    return colors[index % colors.length];
+  };
+
+  // Helper function to prepare category data
+  const prepareCategoryData = async (
+    transactions: Transaction[],
+    userId: string
+  ): Promise<PieChartData[]> => {
+    const categories = await CategoryService.getUserCategories(userId);
+
+    // Group transactions by category
+    const categoryTotals = transactions.reduce(
+      (acc: { [key: string]: number }, transaction) => {
+        acc[transaction.categoryId] =
+          (acc[transaction.categoryId] || 0) + Math.abs(transaction.amount);
+        return acc;
+      },
+      {}
+    );
+
+    // Prepare pie chart data
+    return categories
+      .map((category, index) => ({
+        name: category.name,
+        amount: categoryTotals[category.id] || 0,
+        color: getColorForIndex(index),
+        legendFontColor: "#FFFFFF",
+        legendFontSize: 12,
+      }))
+      .filter((category) => category.amount > 0)
+      .sort((a, b) => b.amount - a.amount);
+  };
+
+  const getTimeFrameLabels = (
+    period: "week" | "month" | "6months" | "year"
+  ) => {
+    switch (period) {
+      case "week":
+        return ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+      case "month":
+        return ["Week 1", "Week 2", "Week 3", "Week 4"];
+      case "6months":
+        return Array.from({ length: 6 }, (_, i) => {
+          const d = new Date();
+          d.setMonth(d.getMonth() - i);
+          return d.toLocaleString("default", { month: "short" });
+        }).reverse();
+      case "year":
+        return ["Q1", "Q2", "Q3", "Q4"];
+    }
   };
 
   useEffect(() => {
@@ -144,119 +303,62 @@ const Dashboard = () => {
 
       setIsLoading(true);
 
-      // Fetch current budgets
-      const currentBudgets = await BudgetService.getCurrentBudgets(userId);
+      // Get date ranges based on timeFrame
+      const { currentStart, currentEnd, previousStart, previousEnd } =
+        getDateRanges(timeFrame);
 
-      // Fetch transactions from last 30 days
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      // Fetch transactions for both periods
       const transactions = await TransactionService.getUserTransactions(userId);
-      const recentTransactions = transactions.filter(
-        (t) => (t.date as Timestamp).toDate() >= thirtyDaysAgo
+      const currentPeriodTransactions = transactions.filter((t) =>
+        isWithinRange((t.date as Timestamp).toDate(), currentStart, currentEnd)
+      );
+      const previousPeriodTransactions = transactions.filter((t) =>
+        isWithinRange(
+          (t.date as Timestamp).toDate(),
+          previousStart,
+          previousEnd
+        )
       );
 
-      // Fetch user categories
-      const categories = await CategoryService.getUserCategories(userId);
+      // Prepare spending over time data
+      const labels = getTimeFrameLabels(timeFrame);
+      const currentData = aggregateTransactionsByPeriod(
+        currentPeriodTransactions,
+        timeFrame
+      );
+      const previousData = aggregateTransactionsByPeriod(
+        previousPeriodTransactions,
+        timeFrame
+      );
 
-      // Fetch user accounts
-      const accounts = await AccountService.getUserAccounts(userId);
-
-      // Prepare spending vs budget data with non-zero values
-      const spendingVsBudgetData = {
-        labels: ["Week 1", "Week 2", "Week 3", "Week 4"],
-        datasets: [
-          {
-            data: [100, 200, 300, 400].map((v) => Math.max(v, 0.01)), // Ensure no zero values
-            color: (opacity = 1) => `rgba(59, 130, 246, ${opacity})`,
-            strokeWidth: 2,
-          },
-          {
-            data: [200, 200, 200, 200].map((v) => Math.max(v, 0.01)), // Ensure no zero values
-            color: (opacity = 1) => `rgba(34, 197, 94, ${opacity})`,
-            strokeWidth: 2,
-          },
-        ],
-      };
-      setSpendingData(spendingVsBudgetData);
-
-      // Prepare category spending data with budget comparison
-      const categorySpendingData = {
-        labels: categories.slice(0, 5).map((cat) => cat.name),
-        datasets: [
-          {
-            data: categories.slice(0, 5).map((cat) => {
-              const categoryTransactions = recentTransactions.filter(
-                (t: Transaction) => t.categoryId === cat.id
-              );
-              return categoryTransactions.reduce(
-                (sum: number, t: Transaction) => sum + t.amount,
-                0
-              );
-            }),
-            color: (opacity = 1) => `rgba(59, 130, 246, ${opacity})`,
-          },
-        ],
-      };
-      setCategoryData(categorySpendingData);
-
-      // Prepare pie chart data with budget comparison
-      const pieChartData = categories.slice(0, 5).map((cat, index) => {
-        const categoryTransactions = recentTransactions.filter(
-          (t: Transaction) => t.categoryId === cat.id
-        );
-        const totalAmount = categoryTransactions.reduce(
-          (sum: number, t: Transaction) => sum + t.amount,
-          0
-        );
-        const budget =
-          currentBudgets
-            .find((b) => b.categories.some((c) => c.categoryId === cat.id))
-            ?.categories.find((c) => c.categoryId === cat.id)?.allocated || 0;
-        const colors = ["#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0", "#9966FF"];
-        return {
-          name: cat.name,
-          amount: totalAmount,
-          budget,
-          color: colors[index],
-          legendFontColor: isDarkMode ? "#FFFFFF" : "#000000",
-          legendFontSize: 12,
-        };
+      setSpendingOverTime({
+        labels,
+        current: currentData,
+        previous: previousData,
       });
-      setPieData(pieChartData);
 
-      // Prepare account balances data with income/expense comparison
-      const accountBalancesData = {
-        labels: accounts.map((acc) => acc.name),
+      // Prepare average spending data
+      const averageData = {
+        labels: labels,
         datasets: [
           {
-            data: accounts.map((acc) => {
-              const incomeTransactions = recentTransactions.filter(
-                (t: Transaction) => t.accountId === acc.id && t.amount > 0
-              );
-              return incomeTransactions.reduce(
-                (sum: number, t: Transaction) => sum + t.amount,
-                0
-              );
-            }),
-            color: (opacity = 1) => `rgba(34, 197, 94, ${opacity})`,
+            data: currentData,
+            color: (opacity = 1) => `rgba(59, 130, 246, ${opacity})`,
           },
           {
-            data: accounts.map((acc) => {
-              const expenseTransactions = recentTransactions.filter(
-                (t: Transaction) => t.accountId === acc.id && t.amount < 0
-              );
-              return Math.abs(
-                expenseTransactions.reduce(
-                  (sum: number, t: Transaction) => sum + t.amount,
-                  0
-                )
-              );
-            }),
-            color: (opacity = 1) => `rgba(239, 68, 68, ${opacity})`,
+            data: calculateHistoricalAverage(transactions, timeFrame),
+            color: (opacity = 1) => `rgba(34, 197, 94, ${opacity})`,
           },
         ],
       };
-      setAccountData(accountBalancesData);
+      setAverageSpending(averageData);
+
+      // Prepare category breakdown
+      const categoryData = await prepareCategoryData(
+        currentPeriodTransactions,
+        userId
+      );
+      setPieData(categoryData);
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
       Toast.show({
@@ -299,7 +401,11 @@ const Dashboard = () => {
   return (
     <ScrollView
       className={isDarkMode ? "bg-[#0A0F1F]" : "bg-white"}
-      contentContainerStyle={{ padding: 20 }}
+      contentContainerStyle={{
+        paddingVertical: 20,
+        paddingHorizontal: 16,
+        alignItems: "center",
+      }}
       refreshControl={
         <RefreshControl
           refreshing={isRefreshing}
@@ -308,115 +414,138 @@ const Dashboard = () => {
         />
       }
     >
-      {/* Spent This Month Widget */}
-      <SpentThisMonthWidget />
+      {/* Spent This Month Widget - centered */}
+      <View className="w-full items-center mb-4">
+        <SpentThisMonthWidget />
+      </View>
 
-      {/* Horizontal Scrollable Cards */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        className="mb-8"
-      >
-        {/* Spending vs Budget Card */}
-        <ChartCard
-          title="Spending vs Budget"
-          onPress={() => handleChartPress("spending", spendingData)}
-        >
+      {/* Time Frame Selector - centered */}
+      <View className="w-full flex-row justify-center space-x-2 mb-6">
+        {["week", "month", "6months", "year"].map((period) => (
+          <TouchableOpacity
+            key={period}
+            onPress={() => setTimeFrame(period as any)}
+            className={`px-4 py-2 rounded-full ${
+              timeFrame === period
+                ? isDarkMode
+                  ? "bg-blue-600"
+                  : "bg-blue-500"
+                : isDarkMode
+                ? "bg-gray-700"
+                : "bg-gray-200"
+            }`}
+          >
+            <Text
+              className={`${
+                isDarkMode ? "text-white" : "text-gray-900"
+              } text-center`}
+            >
+              {period.charAt(0).toUpperCase() + period.slice(1)}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* Charts Container - centered */}
+      <View className="w-full items-center space-y-4">
+        {/* Spending Over Time */}
+        <ChartCard title="Spending Over Time">
           <LineChart
-            data={spendingData}
-            width={screenWidth - 80}
+            data={{
+              labels: spendingOverTime.labels,
+              datasets: [
+                {
+                  data:
+                    spendingOverTime.current.length > 0
+                      ? spendingOverTime.current
+                      : [1],
+                  color: (opacity = 1) => `rgba(59, 130, 246, ${opacity})`,
+                  strokeWidth: 2,
+                },
+              ],
+            }}
+            width={screenWidth - 48}
             height={220}
-            chartConfig={chartConfig}
+            chartConfig={{
+              ...chartConfig,
+              decimalPlaces: 0,
+              formatYLabel: (value) => Math.round(Number(value)).toString(),
+            }}
             bezier
             style={{
               marginVertical: 8,
               borderRadius: 16,
+              alignSelf: "center",
             }}
-            withDots
-            withInnerLines
-            withOuterLines
-            withVerticalLines
-            withHorizontalLines
-            withVerticalLabels
-            withHorizontalLabels
-            withShadow
-            segments={4}
-            fromZero
-            yAxisLabel="$"
-            yAxisInterval={1}
           />
         </ChartCard>
 
-        {/* Category Spending Card */}
-        <ChartCard
-          title="Category Spending"
-          onPress={() => handleChartPress("category", categoryData)}
-        >
+        {/* Average Spending */}
+        <ChartCard title="Average Spending Comparison">
           <BarChart
-            data={categoryData}
-            width={screenWidth - 80}
+            data={{
+              labels: averageSpending.labels,
+              datasets: [
+                {
+                  data:
+                    averageSpending.datasets[0].data.length > 0
+                      ? averageSpending.datasets[0].data
+                      : [1],
+                },
+              ],
+            }}
+            width={screenWidth - 48}
             height={220}
             yAxisLabel="$"
             yAxisSuffix=""
-            chartConfig={chartConfig}
+            chartConfig={{
+              ...chartConfig,
+              decimalPlaces: 0,
+              formatYLabel: (value) => Math.round(Number(value)).toString(),
+            }}
             style={{
               marginVertical: 8,
               borderRadius: 16,
+              alignSelf: "center",
             }}
-            withInnerLines
-            withVerticalLabels
-            withHorizontalLabels
-            segments={4}
-            fromZero
-            showBarTops
           />
         </ChartCard>
 
-        {/* Spending Distribution Card */}
-        <ChartCard
-          title="Spending Distribution"
-          onPress={() => handleChartPress("distribution", pieData)}
-        >
+        {/* Category Breakdown */}
+        <ChartCard title="Category Breakdown">
           <PieChart
-            data={pieData}
-            width={screenWidth - 80}
+            data={
+              pieData.length > 0
+                ? pieData
+                : [
+                    {
+                      name: "No Data",
+                      amount: 1,
+                      color: "#cccccc",
+                      legendFontColor: isDarkMode ? "#FFFFFF" : "#000000",
+                      legendFontSize: 12,
+                    },
+                  ]
+            }
+            width={screenWidth - 48}
             height={220}
-            chartConfig={chartConfig}
+            chartConfig={{
+              ...chartConfig,
+              decimalPlaces: 0,
+              formatYLabel: (value) => Math.round(Number(value)).toString(),
+            }}
             accessor="amount"
             backgroundColor="transparent"
             paddingLeft="15"
             absolute
-            hasLegend={true}
-            center={[screenWidth / 4, 0]}
-          />
-        </ChartCard>
-
-        {/* Account Balances Card */}
-        <ChartCard
-          title="Account Balances"
-          onPress={() => handleChartPress("accounts", accountData)}
-        >
-          <BarChart
-            data={accountData}
-            width={screenWidth - 80}
-            height={220}
-            yAxisLabel="$"
-            yAxisSuffix=""
-            chartConfig={chartConfig}
             style={{
               marginVertical: 8,
               borderRadius: 16,
+              alignSelf: "center",
             }}
-            withInnerLines={true}
-            withVerticalLabels={true}
-            withHorizontalLabels={true}
-            segments={4}
-            fromZero={true}
-            showBarTops={true}
-            withCustomBarColorFromData={true}
           />
         </ChartCard>
-      </ScrollView>
+      </View>
 
       {/* Details Modal */}
       <Modal
