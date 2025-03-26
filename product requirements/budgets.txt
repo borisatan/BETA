@@ -5,7 +5,7 @@ Choose a budget type (e.g., monthly, weekly, custom duration).
 Set a total budget amount.
 Define categories (optional). Unlike the default 50/30/20 split, users can create custom categories (e.g., "Food," "Entertainment," "Transport").
 Set a start and end date.
-Firebase Structure Example:
+Firebase Structure Example: 
 Each budget would have:
 
 budgetId (string, unique identifier)

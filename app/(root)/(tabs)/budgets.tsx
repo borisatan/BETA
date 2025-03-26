@@ -163,6 +163,7 @@ const Budgets = () => {
     if (type === 'category') {
       setShowCustomOrHelp(true);
     } else {
+      // For simple budgets, directly show the budget creation modal
       setShowAddBudget(true);
     }
   };
@@ -171,7 +172,7 @@ const Budgets = () => {
     setShowCustomOrHelp(false);
     if (choice === 'help') {
       setShowHelpMeDecide(true);
-    } else {
+    } else { 
       setShowAddBudget(true);
     }
   };
