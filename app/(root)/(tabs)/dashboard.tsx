@@ -22,6 +22,12 @@ interface ChartData {
   }[];
 }
 
+interface DailySpending {
+  date: string;
+  amount: number;
+  transactions: Transaction[];
+}
+
 interface PieChartData {
   name: string;
   amount: number;
@@ -70,6 +76,8 @@ const Dashboard = () => {
   const [selectedChart, setSelectedChart] = useState<string | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [detailsData, setDetailsData] = useState<any>(null);
+  const [dailySpending, setDailySpending] = useState<DailySpending[]>([]);
+  const [monthlyBudget, setMonthlyBudget] = useState<number>(0);
 
   // Chart data states
   const [spendingData, setSpendingData] = useState<ChartData>({
@@ -123,35 +131,63 @@ const Dashboard = () => {
 
       setIsLoading(true);
 
-      // Fetch current budgets
-      const currentBudgets = await BudgetService.getCurrentBudgets(userId);
-      
-      // Fetch transactions from last 30 days
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      // Get current month's start and end dates
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+      // Fetch current month's transactions
       const transactions = await TransactionService.getUserTransactions(userId);
-      const recentTransactions = transactions.filter(t => 
-        (t.date as Timestamp).toDate() >= thirtyDaysAgo
-      );
-      
-      // Fetch user categories
-      const categories = await CategoryService.getUserCategories(userId);
-      
-      // Fetch user accounts
-      const accounts = await AccountService.getUserAccounts(userId);
+      const currentMonthTransactions = transactions.filter(t => {
+        const transactionDate = (t.date as Timestamp).toDate();
+        return transactionDate >= startOfMonth && transactionDate <= endOfMonth;
+      });
+
+      // Calculate daily spending
+      const dailySpendingMap = new Map<string, { amount: number; transactions: Transaction[] }>();
+      currentMonthTransactions.forEach(transaction => {
+        const date = (transaction.date as Timestamp).toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const existing = dailySpendingMap.get(date) || { amount: 0, transactions: [] };
+        dailySpendingMap.set(date, {
+          amount: existing.amount + Math.abs(transaction.amount),
+          transactions: [...existing.transactions, transaction]
+        });
+      });
+
+      // Convert to array and sort by date
+      const dailySpendingArray = Array.from(dailySpendingMap.entries())
+        .map(([date, data]) => ({
+          date,
+          amount: data.amount,
+          transactions: data.transactions
+        }))
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+      setDailySpending(dailySpendingArray);
+
+      // Get current month's budget
+      const budgets = await BudgetService.getUserBudgets(userId);
+      const currentBudget = budgets.find(b => {
+        const budgetStart = b.startDate.toDate();
+        const budgetEnd = b.endDate.toDate();
+        return budgetStart <= startOfMonth && budgetEnd >= endOfMonth;
+      });
+
+      const monthlyBudgetAmount = currentBudget?.amount || 0;
+      setMonthlyBudget(monthlyBudgetAmount);
 
       // Prepare spending vs budget data
       const spendingVsBudgetData = {
-        labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
+        labels: dailySpendingArray.map(d => d.date),
         datasets: [
           {
-            data: [1200, 1900, 1500, 2100], // Actual spending
+            data: dailySpendingArray.map(d => d.amount),
             color: (opacity = 1) => `rgba(59, 130, 246, ${opacity})`,
             strokeWidth: 2,
             withDots: true
           },
           {
-            data: [2000, 2000, 2000, 2000], // Budget line
+            data: dailySpendingArray.map(() => monthlyBudgetAmount),
             color: (opacity = 1) => `rgba(34, 197, 94, ${opacity})`,
             strokeWidth: 1,
             withDots: false
@@ -160,12 +196,18 @@ const Dashboard = () => {
       };
       setSpendingData(spendingVsBudgetData);
 
+      // Fetch user categories
+      const categories = await CategoryService.getUserCategories(userId);
+      
+      // Fetch user accounts
+      const accounts = await AccountService.getUserAccounts(userId);
+
       // Prepare category spending data with budget comparison
       const categorySpendingData = {
         labels: categories.slice(0, 5).map(cat => cat.name),
         datasets: [{
           data: categories.slice(0, 5).map(cat => {
-            const categoryTransactions = recentTransactions.filter((t: Transaction) => t.categoryId === cat.id);
+            const categoryTransactions = currentMonthTransactions.filter((t: Transaction) => t.categoryId === cat.id);
             return categoryTransactions.reduce((sum: number, t: Transaction) => sum + t.amount, 0);
           }),
           color: (opacity = 1) => `rgba(59, 130, 246, ${opacity})`
@@ -175,9 +217,9 @@ const Dashboard = () => {
 
       // Prepare pie chart data with budget comparison
       const pieChartData = categories.slice(0, 5).map((cat, index) => {
-        const categoryTransactions = recentTransactions.filter((t: Transaction) => t.categoryId === cat.id);
+        const categoryTransactions = currentMonthTransactions.filter((t: Transaction) => t.categoryId === cat.id);
         const totalAmount = categoryTransactions.reduce((sum: number, t: Transaction) => sum + t.amount, 0);
-        const budget = currentBudgets.find(b => b.categories.some(c => c.categoryId === cat.id))?.categories.find(c => c.categoryId === cat.id)?.allocated || 0;
+        const budget = currentBudget?.categories.find(c => c.categoryId === cat.id)?.allocated || 0;
         const colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF'];
         return {
           name: cat.name,
@@ -196,7 +238,7 @@ const Dashboard = () => {
         datasets: [
           {
             data: accounts.map(acc => {
-              const incomeTransactions = recentTransactions.filter((t: Transaction) => 
+              const incomeTransactions = currentMonthTransactions.filter((t: Transaction) => 
                 t.accountId === acc.id && t.amount > 0
               );
               return incomeTransactions.reduce((sum: number, t: Transaction) => sum + t.amount, 0);
@@ -205,7 +247,7 @@ const Dashboard = () => {
           },
           {
             data: accounts.map(acc => {
-              const expenseTransactions = recentTransactions.filter((t: Transaction) => 
+              const expenseTransactions = currentMonthTransactions.filter((t: Transaction) => 
                 t.accountId === acc.id && t.amount < 0
               );
               return Math.abs(expenseTransactions.reduce((sum: number, t: Transaction) => sum + t.amount, 0));
@@ -268,9 +310,17 @@ const Dashboard = () => {
       >
         {/* Spending vs Budget Card */}
         <ChartCard 
-          title="Spending vs Budget"
-          onPress={() => handleChartPress('spending', spendingData)}
+          title="Spent this month"
+          onPress={() => handleChartPress('spending', { dailySpending, monthlyBudget })}
         >
+          <View className="mb-4">
+            <Text className={`text-2xl font-bold ${isDarkMode ? "text-gray-200" : "text-gray-900"}`}>
+              ${dailySpending.reduce((sum, day) => sum + day.amount, 0).toFixed(2)}
+            </Text>
+            <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}>
+              of ${monthlyBudget.toFixed(2)} budget
+            </Text>
+          </View>
           <LineChart
             data={spendingData}
             width={screenWidth - 80}
@@ -383,7 +433,7 @@ const Dashboard = () => {
               <Text className={`text-xl font-bold ${
                 isDarkMode ? "text-gray-200" : "text-gray-900"
               }`}>
-                {selectedChart === 'spending' && 'Spending Details'}
+                {selectedChart === 'spending' && 'Monthly Spending'}
                 {selectedChart === 'category' && 'Category Details'}
                 {selectedChart === 'distribution' && 'Distribution Details'}
                 {selectedChart === 'accounts' && 'Account Details'}
@@ -398,15 +448,45 @@ const Dashboard = () => {
             </View>
 
             {/* Render details based on selected chart */}
-            {detailsData && (
-              <View>
-                {/* Add detailed information based on the chart type */}
-                <Text className={`text-base ${
-                  isDarkMode ? "text-gray-200" : "text-gray-900"
-                }`}>
-                  Detailed information will be displayed here based on the selected chart.
-                </Text>
-              </View>
+            {detailsData && selectedChart === 'spending' && (
+              <ScrollView className="max-h-[70vh]">
+                <View className="space-y-4">
+                  {detailsData.dailySpending.map((day: DailySpending) => (
+                    <View key={day.date} className={`p-4 rounded-lg ${
+                      isDarkMode ? "bg-gray-700" : "bg-gray-100"
+                    }`}>
+                      <View className="flex-row justify-between items-center mb-2">
+                        <Text className={`text-lg font-semibold ${
+                          isDarkMode ? "text-gray-200" : "text-gray-900"
+                        }`}>
+                          {day.date}
+                        </Text>
+                        <Text className={`text-lg font-semibold ${
+                          isDarkMode ? "text-gray-200" : "text-gray-900"
+                        }`}>
+                          ${day.amount.toFixed(2)}
+                        </Text>
+                      </View>
+                      <View className="space-y-2">
+                        {day.transactions.map((transaction: Transaction) => (
+                          <View key={transaction.id} className="flex-row justify-between items-center">
+                            <Text className={`${
+                              isDarkMode ? "text-gray-300" : "text-gray-700"
+                            }`}>
+                              {transaction.description}
+                            </Text>
+                            <Text className={`${
+                              isDarkMode ? "text-gray-300" : "text-gray-700"
+                            }`}>
+                              ${Math.abs(transaction.amount).toFixed(2)}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              </ScrollView>
             )}
           </View>
         </View>
