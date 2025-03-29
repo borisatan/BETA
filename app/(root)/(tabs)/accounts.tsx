@@ -277,10 +277,23 @@ const Accounts = () => {
         return;
       }
 
+      // Remove any commas and convert to number
+      const cleanAmount = parseFloat(incomeAmount.replace(/,/g, ''));
+
+      if (isNaN(cleanAmount)) {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'Please enter a valid amount',
+          position: 'bottom'
+        });
+        return;
+      }
+
       if (isRecurringIncome) {
         // Add recurring income
         await AccountService.addRecurringIncome(selectedAccount.id, {
-          amount: parseFloat(incomeAmount),
+          amount: cleanAmount,
           description: incomeDescription || 'Recurring Income',
           recurrenceType: incomeRecurrenceType,
           recurrenceInterval: parseInt(incomeRecurrenceInterval),
@@ -296,7 +309,7 @@ const Accounts = () => {
       } else {
         // Add one-time income
         await AccountService.addIncome(selectedAccount.id, {
-          amount: parseFloat(incomeAmount),
+          amount: cleanAmount,
           description: incomeDescription || 'Income'
         });
 
@@ -388,8 +401,21 @@ const Accounts = () => {
     try {
       if (!selectedAccount || !editingRecurringIncome) return;
 
+      // Remove any commas and convert to number
+      const cleanAmount = parseFloat(incomeAmount.replace(/,/g, ''));
+
+      if (isNaN(cleanAmount)) {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'Please enter a valid amount',
+          position: 'bottom'
+        });
+        return;
+      }
+
       await AccountService.updateRecurringIncome(selectedAccount.id, editingRecurringIncome.id, {
-        amount: parseFloat(incomeAmount),
+        amount: cleanAmount,
         description: incomeDescription,
         recurrenceType: incomeRecurrenceType,
         recurrenceInterval: parseInt(incomeRecurrenceInterval),
@@ -1070,9 +1096,22 @@ const Accounts = () => {
                 </Text>
                 <TextInput
                   value={incomeAmount}
-                  onChangeText={setIncomeAmount}
+                  onChangeText={(text) => {
+                    // Remove any non-numeric characters except decimal point and comma
+                    const cleaned = text.replace(/[^0-9.,]/g, '');
+                    // Ensure only one decimal point
+                    const parts = cleaned.split('.');
+                    if (parts.length > 2) {
+                      return;
+                    }
+                    // Format the integer part with commas
+                    const integerPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+                    // Combine with decimal part if it exists
+                    const formatted = parts.length > 1 ? `${integerPart}.${parts[1]}` : integerPart;
+                    setIncomeAmount(formatted);
+                  }}
                   placeholder="Enter amount"
-                  keyboardType="numeric"
+                  keyboardType="decimal-pad"
                   returnKeyType="done"
                   className={`p-4 rounded-lg ${
                     isDarkMode 
@@ -1317,9 +1356,22 @@ const Accounts = () => {
                 </Text>
                 <TextInput
                   value={incomeAmount}
-                  onChangeText={setIncomeAmount}
+                  onChangeText={(text) => {
+                    // Remove any non-numeric characters except decimal point and comma
+                    const cleaned = text.replace(/[^0-9.,]/g, '');
+                    // Ensure only one decimal point
+                    const parts = cleaned.split('.');
+                    if (parts.length > 2) {
+                      return;
+                    }
+                    // Format the integer part with commas
+                    const integerPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+                    // Combine with decimal part if it exists
+                    const formatted = parts.length > 1 ? `${integerPart}.${parts[1]}` : integerPart;
+                    setIncomeAmount(formatted);
+                  }}
                   placeholder="Enter amount"
-                  keyboardType="numeric"
+                  keyboardType="decimal-pad"
                   returnKeyType="done"
                   className={`p-4 rounded-lg ${
                     isDarkMode 

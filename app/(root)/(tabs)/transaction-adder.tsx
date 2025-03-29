@@ -234,7 +234,7 @@ const TransactionAdder = () => {
     setNewCategoryMainCategory(category.mainCategory);
     
     // Check if the icon is an emoji or material icon
-    if (commonEmojis.includes(category.icon)) {
+    if (category.icon.length <= 2) {
       setSelectedEmoji(category.icon);
       setSelectedIcon('');
       setShowEmojiPicker(true);
@@ -304,7 +304,29 @@ const TransactionAdder = () => {
         return;
       }
 
+      // If we have a selected emoji, use it as the icon
+      // Otherwise, use the selected material icon
       const iconToSave = selectedEmoji || selectedIcon;
+
+      // Validate that the icon is either a valid emoji or a valid material icon
+      if (!iconToSave) {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'Please select an icon'
+        });
+        return;
+      }
+
+      // If it's not a material icon, it must be an emoji
+      if (!availableIcons.includes(iconToSave) && iconToSave.length > 2) {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'Please select a valid icon'
+        });
+        return;
+      }
 
       if (editingCategory) {
         await CategoryService.updateCategory(editingCategory.id, {

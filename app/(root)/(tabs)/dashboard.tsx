@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -8,8 +8,11 @@ import {
   Dimensions,
   TouchableOpacity,
   Modal,
+  Animated,
+  Pressable,
 } from "react-native";
 import { LineChart, BarChart, PieChart } from "react-native-chart-kit";
+import { Rect, Text as TextSVG, Svg, Line, Circle, G, Polygon } from "react-native-svg";
 import { useTheme } from "../context/ThemeContext";
 import { auth } from "../firebase/firebaseConfig";
 import { TransactionService } from "../services/transactionService";
@@ -20,7 +23,10 @@ import Toast from "react-native-toast-message";
 import { Transaction } from "../firebase/types";
 import { Timestamp } from "firebase/firestore";
 import { MaterialIcons } from "@expo/vector-icons";
-import SpentThisMonthWidget from "./SpentThisMonthWidget";
+import SpentThisMonthWidget from "./spent-this-month-widget";
+import SpendingOverTimeChart from "../charts/SpendingOverTimeChart";
+import AverageSpendingChart from "../charts/AverageSpendingChart";
+import CategoryBreakdownChart from "../charts/CategoryBreakdownChart";
 
 interface ChartData {
   labels: string[];
@@ -30,6 +36,13 @@ interface ChartData {
     strokeWidth?: number;
     withDots?: boolean;
   }[];
+}
+
+interface DataPointClickEvent {
+  index?: number;
+  value?: number;
+  x: number;
+  y: number;
 }
 
 interface DailySpending {
@@ -63,21 +76,20 @@ const ChartCard: React.FC<ChartCardProps> = ({ title, children, onPress }) => {
   const { isDarkMode } = useTheme();
 
   return (
-    <TouchableOpacity
-      onPress={onPress}
-      className={`p-4 rounded-xl mb-4 w-full ${
+    <View
+      className={`p-2 rounded-xl mb-4 w-full ${
         isDarkMode ? "bg-gray-800 shadow-lg" : "bg-white shadow-md"
       }`}
     >
       <Text
-        className={`text-lg font-bold mb-4 text-center ${
+        className={`text-lg font-bold mb-2 text-center ${
           isDarkMode ? "text-gray-200" : "text-gray-900"
         }`}
       >
         {title}
       </Text>
       {children}
-    </TouchableOpacity>
+    </View>
   );
 };
 
@@ -88,6 +100,7 @@ const Dashboard = () => {
   const [selectedChart, setSelectedChart] = useState<string | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [detailsData, setDetailsData] = useState<any>(null);
+  const [isTooltipVisible, setIsTooltipVisible] = useState(false);
   const screenWidth = Dimensions.get("window").width;
   const [timeFrame, setTimeFrame] = useState<
     "week" | "month" | "6months" | "year"
@@ -104,6 +117,9 @@ const Dashboard = () => {
 
   // Chart data states
   const [pieData, setPieData] = useState<PieChartData[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isHolding, setIsHolding] = useState(false);
+  const chartWidth = screenWidth; // Width of the chart area
 
   const chartConfig = {
     backgroundColor: "transparent",
@@ -133,6 +149,10 @@ const Dashboard = () => {
       strokeWidth: 1,
     },
   };
+
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const newDataFadeAnim = useRef(new Animated.Value(0)).current;
+  const [isDataLoading, setIsDataLoading] = useState(false);
 
   // Helper function to check if a date is within a range
   const isWithinRange = (date: Date, start: Date, end: Date) => {
@@ -283,17 +303,95 @@ const Dashboard = () => {
       case "6months":
         return Array.from({ length: 6 }, (_, i) => {
           const d = new Date();
-          d.setMonth(d.getMonth() - i);
+          d.setMonth(d.getMonth() - (5 - i));
           return d.toLocaleString("default", { month: "short" });
-        }).reverse();
+        });
       case "year":
         return ["Q1", "Q2", "Q3", "Q4"];
     }
   };
 
+  // Helper function to round to nearest multiple of 50
+  const roundToNearest50 = (value: number): number => {
+    return Math.round(value / 50) * 50;
+  };
+
+  // Helper function to round array of values to nearest multiple of 50
+  const roundArrayToNearest50 = (values: number[]): number[] => {
+    return values.map(value => roundToNearest50(value));
+  };
+
+  // Helper function to calculate nice y-axis interval
+  const calculateNiceInterval = (maxValue: number): number => {
+    const roundedMax = roundToNearest50(maxValue);
+    const magnitude = Math.pow(10, Math.floor(Math.log10(roundedMax)));
+    const ratio = roundedMax / magnitude;
+    
+    let interval;
+    if (ratio < 1.5) interval = magnitude / 5;
+    else if (ratio < 3) interval = magnitude / 2;
+    else if (ratio < 7) interval = magnitude;
+    else interval = magnitude * 2;
+    
+    return roundToNearest50(interval);
+  };
+
+  // Helper function to find the closest data point for a given x coordinate
+  const findClosestDataPoint = (x: number) => {
+    if (!spendingOverTime.current.length) return null;
+    
+    // Chart layout constants based on react-native-chart-kit's internal layout
+    const yAxisWidth = 54;  // Width reserved for Y-axis labels
+    const chartAreaWidth = chartWidth - yAxisWidth;
+    
+    // Adjust x to account for Y-axis
+    const adjustedX = x - yAxisWidth;
+    
+    // If touch is outside actual chart area, return null
+    if (adjustedX < 0 || adjustedX > chartAreaWidth) return null;
+    
+    const dataPoints = spendingOverTime.current.length;
+    // Calculate segment width based on available space
+    const segmentWidth = chartAreaWidth / (dataPoints);
+    
+    // Find the closest data point
+    const index = Math.round(adjustedX / segmentWidth);
+    if (index < 0 || index >= dataPoints) return null;
+    
+    // Calculate exact X position (from left edge of container)
+    const exactX = yAxisWidth + (index * segmentWidth);
+    
+    // Calculate Y position
+    const chartHeight = 220;
+    const topPadding = 30;
+    const bottomPadding = 40;
+    const availableHeight = chartHeight - topPadding - bottomPadding;
+    
+    const maxValue = Math.max(...spendingOverTime.current, 1);
+    const value = spendingOverTime.current[index];
+    const percentOfMax = value / maxValue;
+    
+    // Y position calculation with proper scaling
+    const exactY = topPadding + (availableHeight * (1 - percentOfMax));
+    
+    return {
+      index,
+      value: spendingOverTime.current[index],
+      label: spendingOverTime.labels[index],
+      exactX: exactX,
+      exactY: exactY
+    };
+  };
+
   useEffect(() => {
     fetchDashboardData();
-  }, []);
+  }, [timeFrame]);
+
+  const handleTimeFrameChange = (newTimeFrame: "week" | "month" | "6months" | "year") => {
+    setIsDataLoading(true);
+    newDataFadeAnim.setValue(0);
+    setTimeFrame(newTimeFrame);
+  };
 
   const fetchDashboardData = async () => {
     try {
@@ -307,11 +405,8 @@ const Dashboard = () => {
         return;
       }
 
-      setIsLoading(true);
-
       // Get date ranges based on timeFrame
-      const { currentStart, currentEnd, previousStart, previousEnd } =
-        getDateRanges(timeFrame);
+      const { currentStart, currentEnd, previousStart, previousEnd } = getDateRanges(timeFrame);
 
       // Fetch transactions for both periods
       const transactions = await TransactionService.getUserTransactions(userId);
@@ -319,29 +414,21 @@ const Dashboard = () => {
         isWithinRange((t.date as Timestamp).toDate(), currentStart, currentEnd)
       );
       const previousPeriodTransactions = transactions.filter((t) =>
-        isWithinRange(
-          (t.date as Timestamp).toDate(),
-          previousStart,
-          previousEnd
-        )
+        isWithinRange((t.date as Timestamp).toDate(), previousStart, previousEnd)
       );
 
       // Prepare spending over time data
       const labels = getTimeFrameLabels(timeFrame);
-      const currentData = aggregateTransactionsByPeriod(
-        currentPeriodTransactions,
-        timeFrame
-      );
-      const previousData = aggregateTransactionsByPeriod(
-        previousPeriodTransactions,
-        timeFrame
-      );
+      const rawCurrentData = aggregateTransactionsByPeriod(currentPeriodTransactions, timeFrame);
+      const rawPreviousData = aggregateTransactionsByPeriod(previousPeriodTransactions, timeFrame);
+      
+      // Round all data points to nearest 50
+      const currentData = roundArrayToNearest50(rawCurrentData);
+      const previousData = roundArrayToNearest50(rawPreviousData);
 
-      setSpendingOverTime({
-        labels,
-        current: currentData,
-        previous: previousData,
-      });
+      // Calculate max value for y-axis scaling
+      const maxValue = Math.max(...currentData, ...previousData);
+      const yAxisInterval = calculateNiceInterval(maxValue);
 
       // Prepare average spending data
       const averageData = {
@@ -352,18 +439,23 @@ const Dashboard = () => {
             color: (opacity = 1) => `rgba(59, 130, 246, ${opacity})`,
           },
           {
-            data: calculateHistoricalAverage(transactions, timeFrame),
+            data: roundArrayToNearest50(calculateHistoricalAverage(transactions, timeFrame)),
             color: (opacity = 1) => `rgba(34, 197, 94, ${opacity})`,
           },
         ],
       };
-      setAverageSpending(averageData);
 
       // Prepare category breakdown
-      const categoryData = await prepareCategoryData(
-        currentPeriodTransactions,
-        userId
-      );
+      const categoryData = await prepareCategoryData(currentPeriodTransactions, userId);
+
+      // Update state with new data
+      setSpendingOverTime({
+        labels,
+        current: currentData,
+        previous: previousData,
+      });
+
+      setAverageSpending(averageData);
       setPieData(categoryData);
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
@@ -391,16 +483,87 @@ const Dashboard = () => {
 
   if (isLoading) {
     return (
-      <View
-        className={`flex-1 justify-center items-center ${
+      <Animated.View
+        className={`flex-1 ${
           isDarkMode ? "bg-[#0A0F1F]" : "bg-white"
         }`}
+        style={{
+          opacity: fadeAnim,
+        }}
       >
-        <ActivityIndicator
-          size="large"
-          color={isDarkMode ? "#3B82F6" : "#1D4ED8"}
-        />
-      </View>
+        <ScrollView
+          contentContainerStyle={{
+            paddingVertical: 20,
+            paddingHorizontal: 0,
+            alignItems: "center",
+          }}
+        >
+          {/* Spent This Month Widget - centered */}
+          <Pressable>
+            <View className="w-full items-center mb-4">
+              <SpentThisMonthWidget timeFrame={timeFrame} />
+            </View>
+          </Pressable>
+
+          {/* Time Frame Selector - centered */}
+          <View className="w-full flex-row justify-center space-x-2 mb-6">
+            {["week", "month", "6months", "year"].map((period) => (
+              <TouchableOpacity
+                key={period}
+                onPress={() => handleTimeFrameChange(period as any)}
+                className={`px-4 py-2 rounded-full ${
+                  timeFrame === period
+                    ? isDarkMode
+                      ? "bg-blue-600"
+                      : "bg-blue-500"
+                    : isDarkMode
+                    ? "bg-gray-700"
+                    : "bg-gray-200"
+                }`}
+              >
+                <Text
+                  className={`${
+                    isDarkMode ? "text-white" : "text-gray-900"
+                  } text-center`}
+                >
+                  {period.charAt(0).toUpperCase() + period.slice(1)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* Charts Container - centered */}
+          <View className="w-full items-center space-y-4">
+            {/* Spending Over Time */}
+            <Animated.View style={{ opacity: fadeAnim, width: '100%' }}>
+              <ChartCard title="Spending Over Time">
+                <SpendingOverTimeChart
+                  data={{
+                    labels: spendingOverTime.labels,
+                    current: spendingOverTime.current,
+                  }}
+                  timeFrame={timeFrame}
+                  onTooltipVisibilityChange={setIsTooltipVisible}
+                />
+              </ChartCard>
+            </Animated.View>
+
+            {/* Average Spending */}
+            <Animated.View style={{ opacity: fadeAnim, width: '100%' }}>
+              <ChartCard title="Average Spending Comparison">
+                <AverageSpendingChart data={averageSpending} />
+              </ChartCard>
+            </Animated.View>
+
+            {/* Category Breakdown */}
+            <Animated.View style={{ opacity: fadeAnim, width: '100%' }}>
+              <ChartCard title="Category Breakdown">
+                <CategoryBreakdownChart data={pieData} />
+              </ChartCard>
+            </Animated.View>
+          </View>
+        </ScrollView>
+      </Animated.View>
     );
   }
 
@@ -409,9 +572,10 @@ const Dashboard = () => {
       className={isDarkMode ? "bg-[#0A0F1F]" : "bg-white"}
       contentContainerStyle={{
         paddingVertical: 20,
-        paddingHorizontal: 16,
+        paddingHorizontal: 0,
         alignItems: "center",
       }}
+      scrollEnabled={!isTooltipVisible}
       refreshControl={
         <RefreshControl
           refreshing={isRefreshing}
@@ -422,7 +586,7 @@ const Dashboard = () => {
     >
       {/* Spent This Month Widget - centered */}
       <View className="w-full items-center mb-4">
-        <SpentThisMonthWidget />
+        <SpentThisMonthWidget timeFrame={timeFrame} />
       </View>
 
       {/* Time Frame Selector - centered */}
@@ -430,7 +594,7 @@ const Dashboard = () => {
         {["week", "month", "6months", "year"].map((period) => (
           <TouchableOpacity
             key={period}
-            onPress={() => setTimeFrame(period as any)}
+            onPress={() => handleTimeFrameChange(period as any)}
             className={`px-4 py-2 rounded-full ${
               timeFrame === period
                 ? isDarkMode
@@ -455,102 +619,32 @@ const Dashboard = () => {
       {/* Charts Container - centered */}
       <View className="w-full items-center space-y-4">
         {/* Spending Over Time */}
-        <ChartCard title="Spending Over Time">
-          <LineChart
-            data={{
-              labels: spendingOverTime.labels,
-              datasets: [
-                {
-                  data:
-                    spendingOverTime.current.length > 0
-                      ? spendingOverTime.current
-                      : [1],
-                  color: (opacity = 1) => `rgba(59, 130, 246, ${opacity})`,
-                  strokeWidth: 2,
-                },
-              ],
-            }}
-            width={screenWidth - 48}
-            height={220}
-            chartConfig={{
-              ...chartConfig,
-              decimalPlaces: 0,
-              formatYLabel: (value) => Math.round(Number(value)).toString(),
-            }}
-            bezier
-            style={{
-              marginVertical: 8,
-              borderRadius: 16,
-              alignSelf: "center",
-            }}
-          />
-        </ChartCard>
+        <Animated.View style={{ opacity: fadeAnim, width: '100%' }}>
+          <ChartCard title="Spending Over Time">
+            <SpendingOverTimeChart
+              data={{
+                labels: spendingOverTime.labels,
+                current: spendingOverTime.current,
+              }}
+              timeFrame={timeFrame}
+              onTooltipVisibilityChange={setIsTooltipVisible}
+            />
+          </ChartCard>
+        </Animated.View>
 
         {/* Average Spending */}
-        <ChartCard title="Average Spending Comparison">
-          <BarChart
-            data={{
-              labels: averageSpending.labels,
-              datasets: [
-                {
-                  data:
-                    averageSpending.datasets[0].data.length > 0
-                      ? averageSpending.datasets[0].data
-                      : [1],
-                },
-              ],
-            }}
-            width={screenWidth - 48}
-            height={220}
-            yAxisLabel="$"
-            yAxisSuffix=""
-            chartConfig={{
-              ...chartConfig,
-              decimalPlaces: 0,
-              formatYLabel: (value) => Math.round(Number(value)).toString(),
-            }}
-            style={{
-              marginVertical: 8,
-              borderRadius: 16,
-              alignSelf: "center",
-            }}
-          />
-        </ChartCard>
+        <Animated.View style={{ opacity: fadeAnim, width: '100%' }}>
+          <ChartCard title="Average Spending Comparison">
+            <AverageSpendingChart data={averageSpending} />
+          </ChartCard>
+        </Animated.View>
 
         {/* Category Breakdown */}
-        <ChartCard title="Category Breakdown">
-          <PieChart
-            data={
-              pieData.length > 0
-                ? pieData
-                : [
-                    {
-                      name: "No Data",
-                      amount: 1,
-                      color: "#cccccc",
-                      legendFontColor: isDarkMode ? "#FFFFFF" : "#000000",
-                      legendFontSize: 12,
-                    },
-                  ]
-            }
-            width={screenWidth - 48}
-            height={220}
-            chartConfig={{
-              ...chartConfig,
-              decimalPlaces: 0,
-              formatYLabel: (value) => Math.round(Number(value)).toString(),
-            }}
-            accessor="amount"
-            backgroundColor="transparent"
-            paddingLeft="15"
-            absolute
-            style={{
-              marginVertical: 8,
-              borderRadius: 16,
-              alignSelf: "center",
-            }}
-          />
-        </ChartCard>
+        <Animated.View style={{ opacity: fadeAnim, width: '100%' }}>
+          <ChartCard title="Category Breakdown">
+            <CategoryBreakdownChart data={pieData} />
+          </ChartCard>
+        </Animated.View>
       </View>
 
       {/* Details Modal */}
