@@ -207,6 +207,14 @@ const ChartCard: React.FC<ChartCardProps> = ({ title, children, onPress }) => {
   );
 };
 
+// Add this interface for grouped transactions
+interface GroupedTransactions {
+  date: Date;
+  formattedDate: string;
+  totalAmount: number;
+  transactions: Transaction[];
+}
+
 const Dashboard = () => {
   const { isDarkMode } = useTheme();
   const [isLoading, setIsLoading] = useState(true);
@@ -316,6 +324,21 @@ const Dashboard = () => {
   const [dailyAggregations, setDailyAggregations] = useState<
     DailyAggregation[]
   >([]);
+
+  // Add new state variables for category transactions display
+  const [selectedCategory, setSelectedCategory] =
+    useState<CategorySummaryData | null>(null);
+  const [categoryTransactions, setCategoryTransactions] = useState<
+    Transaction[]
+  >([]);
+  const [showCategoryTransactionsModal, setShowCategoryTransactionsModal] =
+    useState(false);
+  const [isCategoryTransactionsLoading, setIsCategoryTransactionsLoading] =
+    useState(false);
+
+  // Add state for grouped transactions
+  const [groupedCategoryTransactions, setGroupedCategoryTransactions] =
+    useState<GroupedTransactions[]>([]);
 
   // Add missing utility function for rounding numbers
   const roundToTwoDecimals = (value: number): number => {
@@ -1772,6 +1795,13 @@ const Dashboard = () => {
         .replace("$", "$ ");
     };
 
+    // Handle category click
+    const handleCategoryClick = (category: CategorySummaryData) => {
+      setSelectedCategory(category);
+      loadCategoryTransactions(category.id, category.name);
+      setShowCategoryTransactionsModal(true);
+    };
+
     return (
       <ChartCard
         title={`Top Categories - ${
@@ -1798,71 +1828,76 @@ const Dashboard = () => {
           ) : (
             <>
               {displayCategories.map((category) => (
-                <View
+                <TouchableOpacity
                   key={category.id}
-                  className={`flex-row justify-between items-center py-3 ${
-                    category.id !==
-                    displayCategories[displayCategories.length - 1].id
-                      ? `border-b ${
-                          isDarkMode ? "border-gray-700" : "border-gray-200"
-                        }`
-                      : ""
-                  }`}
+                  onPress={() => handleCategoryClick(category)}
+                  activeOpacity={0.7}
                 >
-                  {/* Left side - Icon, Category Name and Transaction Count */}
-                  <View className="flex-row items-center flex-1">
-                    <View
-                      className="w-10 h-10 rounded-full justify-center items-center mr-3"
-                      style={{ backgroundColor: category.color }}
-                    >
-                      <MaterialIcons
-                        name={category.logo as any}
-                        size={20}
-                        color="white"
-                      />
+                  <View
+                    className={`flex-row justify-between items-center py-3 ${
+                      category.id !==
+                      displayCategories[displayCategories.length - 1].id
+                        ? `border-b ${
+                            isDarkMode ? "border-gray-700" : "border-gray-200"
+                          }`
+                        : ""
+                    }`}
+                  >
+                    {/* Left side - Icon, Category Name and Transaction Count */}
+                    <View className="flex-row items-center flex-1">
+                      <View
+                        className="w-10 h-10 rounded-full justify-center items-center mr-3"
+                        style={{ backgroundColor: category.color }}
+                      >
+                        <MaterialIcons
+                          name={category.logo as any}
+                          size={20}
+                          color="white"
+                        />
+                      </View>
+                      <View>
+                        <Text
+                          className={`font-medium ${
+                            isDarkMode ? "text-white" : "text-gray-900"
+                          }`}
+                        >
+                          {category.name}
+                        </Text>
+                        <Text
+                          className={`text-xs ${
+                            isDarkMode ? "text-gray-400" : "text-gray-500"
+                          }`}
+                        >
+                          {category.transactionCount}{" "}
+                          {category.transactionCount === 1
+                            ? "Transaction"
+                            : "Transactions"}
+                        </Text>
+                      </View>
                     </View>
-                    <View>
+
+                    {/* Right side - Amount and Percentage */}
+                    <View className="items-end">
                       <Text
                         className={`font-medium ${
                           isDarkMode ? "text-white" : "text-gray-900"
                         }`}
                       >
-                        {category.name}
+                        {formatCurrency(category.amount)}
                       </Text>
                       <Text
                         className={`text-xs ${
                           isDarkMode ? "text-gray-400" : "text-gray-500"
                         }`}
                       >
-                        {category.transactionCount}{" "}
-                        {category.transactionCount === 1
-                          ? "Transaction"
-                          : "Transactions"}
+                        {category.percentage < 1
+                          ? category.percentage.toFixed(1)
+                          : category.percentage.toFixed(0)}
+                        %
                       </Text>
                     </View>
                   </View>
-
-                  {/* Right side - Amount and Percentage */}
-                  <View className="items-end">
-                    <Text
-                      className={`font-medium ${
-                        isDarkMode ? "text-white" : "text-gray-900"
-                      }`}
-                    >
-                      {formatCurrency(category.amount)}
-                    </Text>
-                    <Text
-                      className={`text-xs ${
-                        isDarkMode ? "text-gray-400" : "text-gray-500"
-                      }`}
-                    >
-                      {category.percentage < 1
-                        ? category.percentage.toFixed(1)
-                        : category.percentage.toFixed(0)}
-                      %
-                    </Text>
-                  </View>
-                </View>
+                </TouchableOpacity>
               ))}
 
               {categorySummaries.length > 5 && (
@@ -1981,6 +2016,124 @@ const Dashboard = () => {
 
     // Enforce cache limits
     enforceCacheLimits();
+  };
+
+  // Add function to load transactions for a specific category
+  const loadCategoryTransactions = async (
+    categoryId: string,
+    categoryName: string
+  ) => {
+    setIsCategoryTransactionsLoading(true);
+
+    try {
+      const userId = auth.currentUser?.uid;
+      if (!userId) {
+        throw new Error("User not logged in");
+      }
+
+      // Use cached transactions if available
+      const cacheKey = `${timeFrame}-${userId}`;
+      const cache = transactionCache[cacheKey];
+      let transactions: Transaction[] = [];
+
+      if (cache && cache.transactions.length > 0) {
+        console.log(`Using cached transactions for category ${categoryName}`);
+        transactions = cache.transactions;
+      } else {
+        // Fallback to fetching if needed
+        const { currentStart, currentEnd } = getDateRanges(timeFrame);
+        transactions = await TransactionService.getTransactionsByDateRange(
+          userId,
+          currentStart,
+          currentEnd
+        );
+      }
+
+      // Filter transactions for the selected category
+      const filteredTransactions = transactions.filter(
+        (t) =>
+          t.categoryId === categoryId ||
+          (t as any).category_id === categoryId ||
+          (t as any).categoryID === categoryId
+      );
+
+      // Sort transactions by date (newest first)
+      const sortedTransactions = filteredTransactions.sort(
+        (a, b) => b.date.toDate().getTime() - a.date.toDate().getTime()
+      );
+
+      console.log(
+        `Found ${sortedTransactions.length} transactions for category ${categoryName}`
+      );
+      setCategoryTransactions(sortedTransactions);
+    } catch (error) {
+      console.error("Error loading category transactions:", error);
+      setCategoryTransactions([]);
+      Toast.show({
+        type: "error",
+        text1: "Error",
+        text2: "Failed to load category transactions",
+      });
+    } finally {
+      setIsCategoryTransactionsLoading(false);
+    }
+  };
+
+  // Create component for transaction item in the modal
+  const TransactionItem = ({ transaction }: { transaction: Transaction }) => {
+    // Format date as MM/DD/YYYY
+    const formatDate = (timestamp: Timestamp) => {
+      const date = timestamp.toDate();
+      return date.toLocaleDateString("en-US", {
+        month: "2-digit",
+        day: "2-digit",
+        year: "numeric",
+      });
+    };
+
+    // Format currency with comma separators
+    const formatCurrency = (amount: number) => {
+      return amount
+        .toLocaleString("en-US", {
+          style: "currency",
+          currency: "USD",
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 2,
+        })
+        .replace("$", "$ ");
+    };
+
+    return (
+      <View
+        className={`flex-row justify-between items-center py-3 border-b ${
+          isDarkMode ? "border-gray-700" : "border-gray-200"
+        }`}
+      >
+        <View className="flex-1">
+          <Text
+            className={`font-medium ${
+              isDarkMode ? "text-white" : "text-gray-900"
+            }`}
+          >
+            {transaction.description || "Unknown"}
+          </Text>
+          <Text
+            className={`text-xs ${
+              isDarkMode ? "text-gray-400" : "text-gray-500"
+            }`}
+          >
+            {formatDate(transaction.date)}
+          </Text>
+        </View>
+        <Text
+          className={`font-medium ${
+            isDarkMode ? "text-white" : "text-gray-900"
+          }`}
+        >
+          {formatCurrency(Math.abs(transaction.amount))}
+        </Text>
+      </View>
+    );
   };
 
   if (isLoading) {
@@ -2201,6 +2354,166 @@ const Dashboard = () => {
         })()}
         <CategorySummaryCard />
       </View>
+
+      {/* Category Transactions Modal */}
+      <Modal
+        visible={showCategoryTransactionsModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowCategoryTransactionsModal(false)}
+      >
+        <View className="flex-1 justify-end">
+          <View
+            className={`rounded-t-3xl p-6 ${
+              isDarkMode ? "bg-gray-800" : "bg-white"
+            }`}
+            style={{ maxHeight: "80%" }}
+          >
+            <View className="flex-row justify-between items-center mb-4">
+              <View className="flex-row items-center">
+                {selectedCategory && (
+                  <>
+                    <View
+                      className="w-8 h-8 rounded-full justify-center items-center mr-2"
+                      style={{ backgroundColor: selectedCategory.color }}
+                    >
+                      <MaterialIcons
+                        name={selectedCategory.logo as any}
+                        size={16}
+                        color="white"
+                      />
+                    </View>
+                    <Text
+                      className={`text-xl font-bold ${
+                        isDarkMode ? "text-gray-200" : "text-gray-900"
+                      }`}
+                    >
+                      {selectedCategory.name}
+                    </Text>
+                  </>
+                )}
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowCategoryTransactionsModal(false)}
+              >
+                <MaterialIcons
+                  name="close"
+                  size={24}
+                  color={isDarkMode ? "#E5E7EB" : "#1F2937"}
+                />
+              </TouchableOpacity>
+            </View>
+
+            {/* Category statistics summary */}
+            {selectedCategory && (
+              <View
+                className={`mb-4 p-3 rounded-lg ${
+                  isDarkMode ? "bg-gray-700" : "bg-gray-100"
+                }`}
+              >
+                <View className="flex-row justify-between">
+                  <Text
+                    className={isDarkMode ? "text-gray-300" : "text-gray-600"}
+                  >
+                    Total Spent:
+                  </Text>
+                  <Text
+                    className={`font-bold ${
+                      isDarkMode ? "text-white" : "text-gray-900"
+                    }`}
+                  >
+                    {selectedCategory.amount.toLocaleString("en-US", {
+                      style: "currency",
+                      currency: "USD",
+                      minimumFractionDigits: 0,
+                      maximumFractionDigits: 2,
+                    })}
+                  </Text>
+                </View>
+                <View className="flex-row justify-between mt-1">
+                  <Text
+                    className={isDarkMode ? "text-gray-300" : "text-gray-600"}
+                  >
+                    Transactions:
+                  </Text>
+                  <Text
+                    className={`font-bold ${
+                      isDarkMode ? "text-white" : "text-gray-900"
+                    }`}
+                  >
+                    {selectedCategory.transactionCount}
+                  </Text>
+                </View>
+                <View className="flex-row justify-between mt-1">
+                  <Text
+                    className={isDarkMode ? "text-gray-300" : "text-gray-600"}
+                  >
+                    % of Total:
+                  </Text>
+                  <Text
+                    className={`font-bold ${
+                      isDarkMode ? "text-white" : "text-gray-900"
+                    }`}
+                  >
+                    {selectedCategory.percentage < 1
+                      ? selectedCategory.percentage.toFixed(1)
+                      : selectedCategory.percentage.toFixed(0)}
+                    %
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            <Text
+              className={`text-lg font-semibold mb-2 ${
+                isDarkMode ? "text-gray-300" : "text-gray-800"
+              }`}
+            >
+              Transactions
+            </Text>
+
+            {isCategoryTransactionsLoading ? (
+              <View className="py-8 items-center">
+                <ActivityIndicator
+                  size="large"
+                  color={isDarkMode ? "#3B82F6" : "#1D4ED8"}
+                />
+                <Text
+                  className={`mt-2 ${
+                    isDarkMode ? "text-gray-400" : "text-gray-500"
+                  }`}
+                >
+                  Loading transactions...
+                </Text>
+              </View>
+            ) : (
+              <ScrollView
+                className="max-h-96"
+                showsVerticalScrollIndicator={true}
+              >
+                {categoryTransactions.length > 0 ? (
+                  categoryTransactions.map((transaction, index) => (
+                    <TransactionItem
+                      key={transaction.id || index}
+                      transaction={transaction}
+                    />
+                  ))
+                ) : (
+                  <View className="py-8 items-center">
+                    <Text
+                      className={`${
+                        isDarkMode ? "text-gray-400" : "text-gray-500"
+                      }`}
+                    >
+                      No transactions found for this category
+                    </Text>
+                  </View>
+                )}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       {/* Details Modal */}
       <Modal
