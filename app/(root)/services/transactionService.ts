@@ -46,6 +46,33 @@ export class TransactionService {
     })) as Transaction[];
   }
 
+  // New method to fetch transactions by date range
+  static async getTransactionsByDateRange(
+    userId: string,
+    startDate: Date,
+    endDate: Date
+  ): Promise<Transaction[]> {
+    try {
+      // Create query with date range filters
+      const q = query(
+        collection(db, this.collection),
+        where('userId', '==', userId),
+        where('date', '>=', Timestamp.fromDate(startDate)),
+        where('date', '<=', Timestamp.fromDate(endDate)),
+        orderBy('date', 'desc')
+      );
+
+      const querySnapshot = await getDocs(q);
+      return querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Transaction[];
+    } catch (error) {
+      console.error('Error fetching transactions by date range:', error);
+      throw error;
+    }
+  }
+
   static async getAccountTransactions(accountId: string): Promise<Transaction[]> {
     try {
       const userId = auth.currentUser?.uid;

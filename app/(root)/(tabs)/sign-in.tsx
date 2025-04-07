@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, Image, Alert } from 'react-native';
 import icons from '@constants/icons';
-import { Link } from 'expo-router';
+import { Link, router } from 'expo-router';
 import Constants from 'expo-constants';
 import { auth } from "../firebase/firebaseConfig";
 import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithCredential } from "firebase/auth";
@@ -10,11 +10,13 @@ import { FirebaseError } from "firebase/app";
 import Toast from 'react-native-toast-message';
 import { useTheme } from '../context/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { PreloadService } from '../services/preloadService';
 
 const SignIn = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [googleUser, setGoogleUser] = useState<any>();
+  const [isSigningIn, setIsSigningIn] = useState(false);
   const { isDarkMode } = useTheme();
 
   // Google Sign-In - Setup
@@ -29,17 +31,43 @@ const SignIn = () => {
     }
   }, [response]);
 
+  // Start dashboard data preloading after successful authentication
+  const startDashboardPreloading = async (userId: string) => {
+    try {
+      console.log('Starting dashboard data preloading after sign-in');
+      // Navigate to dashboard immediately - don't wait for preloading
+      router.replace('/dashboard');
+      
+      // Preload in background
+      await PreloadService.preloadDashboardData('month');
+    } catch (error) {
+      console.error('Error preloading dashboard data:', error);
+      // Still navigate even if preloading fails
+      router.replace('/dashboard');
+    }
+  };
+
   const handleEmailSignIn = async () => {
+    if (isSigningIn) return; // Prevent multiple sign-in attempts
+    
     if (!email.trim() || !password.trim()) {
       Toast.show({type: 'error', text1: 'Error', text2: 'Email and password cannot be empty.'});
       return;
     }
+    
+    setIsSigningIn(true);
+    
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       console.log('User signed in:', userCredential.user);
+      
       // Store authentication state
       await AsyncStorage.setItem('isAuthenticated', 'true');
+      
       Toast.show({type: 'success', text1: 'Welcome Back!', text2: 'Signed in successfully.'});
+      
+      // Start dashboard preloading
+      await startDashboardPreloading(userCredential.user.uid);
     } catch (error: any) {
       if (error instanceof FirebaseError) {
         console.error('Firebase Error:', error.code, error.message);
@@ -63,20 +91,32 @@ const SignIn = () => {
       } else {
         console.error('Unexpected Error: ', error);
       }
+    } finally {
+      setIsSigningIn(false);
     }
   };
 
   const handleGoogleSignIn = async (idToken: string) => {
+    setIsSigningIn(true);
+    
     try {
       const googleCredential = GoogleAuthProvider.credential(idToken);
       const userCredential = await signInWithCredential(auth, googleCredential);
+      
       // Store authentication state
       await AsyncStorage.setItem('isAuthenticated', 'true');
       console.log('Google Sign-In successful:', userCredential.user);
       setGoogleUser(userCredential.user);
+      
+      Toast.show({type: 'success', text1: 'Welcome Back!', text2: 'Signed in successfully with Google.'});
+      
+      // Start dashboard preloading
+      await startDashboardPreloading(userCredential.user.uid);
     } catch (error) {
       console.error('Google Sign-In error:', error);
-      alert('Something went wrong with Google Sign-In.');
+      Toast.show({ type: 'error', text1: 'Error', text2: 'Something went wrong with Google Sign-In.' });
+    } finally {
+      setIsSigningIn(false);
     }
   };
 
