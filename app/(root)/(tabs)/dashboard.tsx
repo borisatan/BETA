@@ -20,13 +20,14 @@ import { AccountService } from "../services/accountService";
 import { CategoryService } from "../services/categoryService";
 import { BudgetService } from "../services/budgetService";
 import Toast from "react-native-toast-message";
-import { Transaction } from "../firebase/types";
+import { Transaction, DailyAggregation } from "../firebase/types";
 import { Timestamp } from "firebase/firestore";
 import { MaterialIcons } from "@expo/vector-icons";
 import SpentThisMonthWidget from "./spent-this-month-widget";
 import SpendingOverTimeChart from "../charts/SpendingOverTimeChart";
 import AverageSpendingChart from "../charts/AverageSpendingChart";
 import CategoryBreakdownChart from "../charts/CategoryBreakdownChart";
+import { DailyAggregationService } from '../services/dailyAggregationService';
 
 interface ChartData {
   labels: string[];
@@ -72,6 +73,8 @@ interface TimeFrameData {
   labels: string[];
 }
 
+type GraphType = 'spending' | 'average' | 'category';
+
 const ChartCard: React.FC<ChartCardProps> = ({ title, children, onPress }) => {
   const { isDarkMode } = useTheme();
 
@@ -101,6 +104,7 @@ const Dashboard = () => {
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [detailsData, setDetailsData] = useState<any>(null);
   const [isTooltipVisible, setIsTooltipVisible] = useState(false);
+  const [selectedGraph, setSelectedGraph] = useState<GraphType>('spending');
   const screenWidth = Dimensions.get("window").width;
   const [timeFrame, setTimeFrame] = useState<
     "week" | "month" | "6months" | "year"
@@ -202,18 +206,18 @@ const Dashboard = () => {
   };
 
   // Helper function to get group key for transactions
-  const getGroupKey = (date: Date, timeFrame: string): string => {
+  const getGroupKey = (date: Date, timeFrame: "week" | "month" | "6months" | "year"): string => {
     switch (timeFrame) {
       case "week":
-        return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][date.getDay()];
+        return date.toLocaleDateString('en-US', { weekday: 'short' });
       case "month":
         return `Week ${Math.ceil(date.getDate() / 7)}`;
       case "6months":
-        return date.toLocaleString("default", { month: "short" });
+        return date.toLocaleDateString('en-US', { month: 'short' });
       case "year":
         return `Q${Math.floor(date.getMonth() / 3) + 1}`;
       default:
-        return "";
+        return date.toLocaleDateString();
     }
   };
 
@@ -236,16 +240,64 @@ const Dashboard = () => {
     return labels.map((label) => grouped[label] || 0);
   };
 
+  // Helper function to get time frame labels
+  const getTimeFrameLabels = (timeFrame: "week" | "month" | "6months" | "year"): string[] => {
+    switch (timeFrame) {
+      case "week":
+        return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      case "month":
+        return ["Week 1", "Week 2", "Week 3", "Week 4", "Week 5"];
+      case "6months":
+        return ["Jan", "Feb", "Mar", "Apr", "May", "Jun"];
+      case "year":
+        return ["Q1", "Q2", "Q3", "Q4"];
+      default:
+        return [];
+    }
+  };
+
+  // Helper function to get window size based on time frame
+  const getWindowSize = (timeFrame: "week" | "month" | "6months" | "year"): number => {
+    switch (timeFrame) {
+      case "week":
+        return 3; // 3-day moving average
+      case "month":
+        return 2; // 2-week moving average
+      case "6months":
+        return 3; // 3-month moving average
+      case "year":
+        return 2; // 2-quarter moving average
+      default:
+        return 3;
+    }
+  };
+
   // Helper function to calculate historical average
-  const calculateHistoricalAverage = (
-    transactions: Transaction[],
-    timeFrame: "week" | "month" | "6months" | "year"
-  ): number[] => {
+  const calculateHistoricalAverage = (data: number[], timeFrame: "week" | "month" | "6months" | "year"): number[] => {
+    const windowSize = getWindowSize(timeFrame);
+    const averages: number[] = [];
+    
+    for (let i = 0; i < data.length; i++) {
+      const start = Math.max(0, i - windowSize + 1);
+      const window = data.slice(start, i + 1);
+      const average = window.reduce((sum, val) => sum + val, 0) / window.length;
+      averages.push(average);
+    }
+    
+    return averages;
+  };
+
+  // Helper function to aggregate data by time frame
+  const aggregateByTimeFrame = (aggregations: DailyAggregation[], timeFrame: "week" | "month" | "6months" | "year"): number[] => {
     const labels = getTimeFrameLabels(timeFrame);
-    // Calculate simple average for demonstration
-    const total = transactions.reduce((sum, t) => sum + Math.abs(t.amount), 0);
-    const average = total / transactions.length || 0;
-    return labels.map(() => average);
+    const grouped = aggregations.reduce((acc: { [key: string]: number }, agg) => {
+      const date = agg.date.toDate();
+      const key = getGroupKey(date, timeFrame);
+      acc[key] = (acc[key] || 0) + agg.totalExpenses;
+      return acc;
+    }, {});
+
+    return labels.map((label: string) => grouped[label] || 0);
   };
 
   // Helper function to get color for pie chart
@@ -263,23 +315,16 @@ const Dashboard = () => {
   };
 
   // Helper function to prepare category data
-  const prepareCategoryData = async (
-    transactions: Transaction[],
-    userId: string
-  ): Promise<PieChartData[]> => {
-    const categories = await CategoryService.getUserCategories(userId);
+  const prepareCategoryData = async (aggregations: DailyAggregation[]): Promise<PieChartData[]> => {
+    const categoryTotals = aggregations.reduce((acc: { [key: string]: number }, agg) => {
+      if (agg.categoryId) {
+        acc[agg.categoryId] = (acc[agg.categoryId] || 0) + agg.totalExpenses;
+      }
+      return acc;
+    }, {});
 
-    // Group transactions by category
-    const categoryTotals = transactions.reduce(
-      (acc: { [key: string]: number }, transaction) => {
-        acc[transaction.categoryId] =
-          (acc[transaction.categoryId] || 0) + Math.abs(transaction.amount);
-        return acc;
-      },
-      {}
-    );
-
-    // Prepare pie chart data
+    const categories = await CategoryService.getUserCategories(auth.currentUser?.uid || '');
+    
     return categories
       .map((category, index) => ({
         name: category.name,
@@ -290,25 +335,6 @@ const Dashboard = () => {
       }))
       .filter((category) => category.amount > 0)
       .sort((a, b) => b.amount - a.amount);
-  };
-
-  const getTimeFrameLabels = (
-    period: "week" | "month" | "6months" | "year"
-  ) => {
-    switch (period) {
-      case "week":
-        return ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-      case "month":
-        return ["Week 1", "Week 2", "Week 3", "Week 4"];
-      case "6months":
-        return Array.from({ length: 6 }, (_, i) => {
-          const d = new Date();
-          d.setMonth(d.getMonth() - (5 - i));
-          return d.toLocaleString("default", { month: "short" });
-        });
-      case "year":
-        return ["Q1", "Q2", "Q3", "Q4"];
-    }
   };
 
   // Helper function to round to nearest multiple of 50
@@ -408,26 +434,31 @@ const Dashboard = () => {
       // Get date ranges based on timeFrame
       const { currentStart, currentEnd, previousStart, previousEnd } = getDateRanges(timeFrame);
 
-      // Fetch transactions for both periods
-      const transactions = await TransactionService.getUserTransactions(userId);
-      const currentPeriodTransactions = transactions.filter((t) =>
-        isWithinRange((t.date as Timestamp).toDate(), currentStart, currentEnd)
+      // Fetch daily aggregations for both periods
+      const currentAggregations = await DailyAggregationService.getDailyAggregations(
+        userId,
+        currentStart,
+        currentEnd
       );
-      const previousPeriodTransactions = transactions.filter((t) =>
-        isWithinRange((t.date as Timestamp).toDate(), previousStart, previousEnd)
+      const previousAggregations = await DailyAggregationService.getDailyAggregations(
+        userId,
+        previousStart,
+        previousEnd
       );
 
       // Prepare spending over time data
       const labels = getTimeFrameLabels(timeFrame);
-      const rawCurrentData = aggregateTransactionsByPeriod(currentPeriodTransactions, timeFrame);
-      const rawPreviousData = aggregateTransactionsByPeriod(previousPeriodTransactions, timeFrame);
       
+      // Group aggregations by time frame
+      const currentData = aggregateByTimeFrame(currentAggregations, timeFrame);
+      const previousData = aggregateByTimeFrame(previousAggregations, timeFrame);
+
       // Round all data points to nearest 50
-      const currentData = roundArrayToNearest50(rawCurrentData);
-      const previousData = roundArrayToNearest50(rawPreviousData);
+      const roundedCurrentData = roundArrayToNearest50(currentData);
+      const roundedPreviousData = roundArrayToNearest50(previousData);
 
       // Calculate max value for y-axis scaling
-      const maxValue = Math.max(...currentData, ...previousData);
+      const maxValue = Math.max(...roundedCurrentData, ...roundedPreviousData);
       const yAxisInterval = calculateNiceInterval(maxValue);
 
       // Prepare average spending data
@@ -435,24 +466,24 @@ const Dashboard = () => {
         labels: labels,
         datasets: [
           {
-            data: currentData,
+            data: roundedCurrentData,
             color: (opacity = 1) => `rgba(59, 130, 246, ${opacity})`,
           },
           {
-            data: roundArrayToNearest50(calculateHistoricalAverage(transactions, timeFrame)),
+            data: roundArrayToNearest50(calculateHistoricalAverage(roundedCurrentData, timeFrame)),
             color: (opacity = 1) => `rgba(34, 197, 94, ${opacity})`,
           },
         ],
       };
 
       // Prepare category breakdown
-      const categoryData = await prepareCategoryData(currentPeriodTransactions, userId);
+      const categoryData = await prepareCategoryData(currentAggregations);
 
       // Update state with new data
       setSpendingOverTime({
         labels,
-        current: currentData,
-        previous: previousData,
+        current: roundedCurrentData,
+        previous: roundedPreviousData,
       });
 
       setAverageSpending(averageData);
@@ -479,6 +510,70 @@ const Dashboard = () => {
     setSelectedChart(chartType);
     setDetailsData(data);
     setShowDetailsModal(true);
+  };
+
+  const renderGraphSelector = () => (
+    <View className="w-full items-center mb-4">
+      <TouchableOpacity
+        onPress={() => {
+          setSelectedGraph(prev => {
+            switch (prev) {
+              case 'spending': return 'average';
+              case 'average': return 'category';
+              case 'category': return 'spending';
+              default: return 'spending';
+            }
+          });
+        }}
+        className={`px-6 py-3 rounded-full ${
+          isDarkMode ? "bg-gray-800" : "bg-gray-100"
+        }`}
+      >
+        <Text className={`${isDarkMode ? "text-white" : "text-gray-900"} font-medium`}>
+          {selectedGraph === 'spending' && 'Spending Over Time'}
+          {selectedGraph === 'average' && 'Average Spending'}
+          {selectedGraph === 'category' && 'Category Breakdown'}
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const renderSelectedGraph = () => {
+    switch (selectedGraph) {
+      case 'spending':
+        return (
+          <Animated.View style={{ opacity: fadeAnim, width: '100%' }}>
+            <ChartCard title="Spending Over Time">
+              <SpendingOverTimeChart
+                data={{
+                  labels: spendingOverTime.labels,
+                  current: spendingOverTime.current,
+                }}
+                timeFrame={timeFrame}
+                onTooltipVisibilityChange={setIsTooltipVisible}
+              />
+            </ChartCard>
+          </Animated.View>
+        );
+      case 'average':
+        return (
+          <Animated.View style={{ opacity: fadeAnim, width: '100%' }}>
+            <ChartCard title="Average Spending Comparison">
+              <AverageSpendingChart data={averageSpending} />
+            </ChartCard>
+          </Animated.View>
+        );
+      case 'category':
+        return (
+          <Animated.View style={{ opacity: fadeAnim, width: '100%' }}>
+            <ChartCard title="Category Breakdown">
+              <CategoryBreakdownChart data={pieData} />
+            </ChartCard>
+          </Animated.View>
+        );
+      default:
+        return null;
+    }
   };
 
   if (isLoading) {
@@ -532,36 +627,11 @@ const Dashboard = () => {
             ))}
           </View>
 
-          {/* Charts Container - centered */}
-          <View className="w-full items-center space-y-4">
-            {/* Spending Over Time */}
-            <Animated.View style={{ opacity: fadeAnim, width: '100%' }}>
-              <ChartCard title="Spending Over Time">
-                <SpendingOverTimeChart
-                  data={{
-                    labels: spendingOverTime.labels,
-                    current: spendingOverTime.current,
-                  }}
-                  timeFrame={timeFrame}
-                  onTooltipVisibilityChange={setIsTooltipVisible}
-                />
-              </ChartCard>
-            </Animated.View>
+          {/* Graph Selector */}
+          {renderGraphSelector()}
 
-            {/* Average Spending */}
-            <Animated.View style={{ opacity: fadeAnim, width: '100%' }}>
-              <ChartCard title="Average Spending Comparison">
-                <AverageSpendingChart data={averageSpending} />
-              </ChartCard>
-            </Animated.View>
-
-            {/* Category Breakdown */}
-            <Animated.View style={{ opacity: fadeAnim, width: '100%' }}>
-              <ChartCard title="Category Breakdown">
-                <CategoryBreakdownChart data={pieData} />
-              </ChartCard>
-            </Animated.View>
-          </View>
+          {/* Selected Graph */}
+          {renderSelectedGraph()}
         </ScrollView>
       </Animated.View>
     );
@@ -616,36 +686,11 @@ const Dashboard = () => {
         ))}
       </View>
 
-      {/* Charts Container - centered */}
-      <View className="w-full items-center space-y-4">
-        {/* Spending Over Time */}
-        <Animated.View style={{ opacity: fadeAnim, width: '100%' }}>
-          <ChartCard title="Spending Over Time">
-            <SpendingOverTimeChart
-              data={{
-                labels: spendingOverTime.labels,
-                current: spendingOverTime.current,
-              }}
-              timeFrame={timeFrame}
-              onTooltipVisibilityChange={setIsTooltipVisible}
-            />
-          </ChartCard>
-        </Animated.View>
+      {/* Graph Selector */}
+      {renderGraphSelector()}
 
-        {/* Average Spending */}
-        <Animated.View style={{ opacity: fadeAnim, width: '100%' }}>
-          <ChartCard title="Average Spending Comparison">
-            <AverageSpendingChart data={averageSpending} />
-          </ChartCard>
-        </Animated.View>
-
-        {/* Category Breakdown */}
-        <Animated.View style={{ opacity: fadeAnim, width: '100%' }}>
-          <ChartCard title="Category Breakdown">
-            <CategoryBreakdownChart data={pieData} />
-          </ChartCard>
-        </Animated.View>
-      </View>
+      {/* Selected Graph */}
+      {renderSelectedGraph()}
 
       {/* Details Modal */}
       <Modal

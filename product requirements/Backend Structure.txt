@@ -52,6 +52,22 @@ name (string) - Name of the subcategory (e.g., "Utilities", "Rent", "Car")
 category_id (Foreign Key) - The category this subcategory belongs to (linked to Categories)
 created_at (datetime) - When the subcategory was created
 updated_at (datetime) - When the subcategory was last updated
+6. Daily Aggregations
+This table stores pre-aggregated transaction data to efficiently power financial graphs and analytics.
+
+Fields:
+id (Primary Key) - Unique identifier for each aggregation
+userId (string) - Reference to the user who owns this aggregation
+date (timestamp) - The date this aggregation represents
+accountId (string, optional) - Reference to a specific account for per-account graphs
+categoryId (string, optional) - Reference to a category for category-specific aggregations
+totalIncome (number) - Sum of all income transactions for the day
+totalExpenses (number) - Sum of all expense transactions for the day
+netFlow (number) - Difference between totalIncome and totalExpenses
+transactionCount (number) - Number of transactions included in this aggregation
+createdAt (timestamp) - When the aggregation was created
+updatedAt (timestamp) - When the aggregation was last updated
+
 Database Relationships
 Here are the main relationships between the tables:
 
@@ -67,3 +83,44 @@ Each category can have multiple subcategories. A category has many subcategories
 Transactions ↔ Categories ↔ Subcategories:
 
 Each transaction is categorized into a category and a subcategory through the category_id and subcategory_id.
+
+Daily Aggregations ↔ Transactions:
+- Each aggregation row represents the sum of transactions for a specific day
+- When a transaction is created, updated, or deleted, the corresponding aggregation is automatically updated
+- Aggregations can be filtered by accountId or categoryId for specific views
+
+Daily Aggregations ↔ Users:
+- Each aggregation belongs to exactly one user
+- Users can only access their own aggregations
+- Aggregations are automatically created and updated when users modify their transactions
+
+Implementation Details
+The system includes:
+
+1. Automatic Updates:
+- When a transaction is created, the corresponding daily aggregation is updated
+- When a transaction is modified, all affected aggregations are recalculated
+- When a transaction is deleted, the aggregations are adjusted accordingly
+
+2. Data Integrity:
+- All numeric fields are validated to be non-negative
+- NetFlow is validated to equal totalIncome - totalExpenses
+- Timestamps are validated to be proper Firestore timestamps
+- User ownership is strictly enforced
+
+3. Performance Optimizations:
+- List operations are limited to 1000 documents
+- Aggregations are stored at daily granularity
+- Category-specific aggregations are stored separately from total aggregations
+
+4. Security Rules:
+- Only authenticated users can access the collection
+- Users can only read/write their own data
+- User IDs cannot be modified during updates
+- All fields are validated for correct types and values
+
+5. Rebuild Capability:
+- The system includes a rebuild function to recalculate all aggregations
+- This is useful for data recovery or fixing inconsistencies
+- Rebuilds are performed atomically to maintain data integrity
+

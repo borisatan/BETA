@@ -1,8 +1,9 @@
 import { db } from '../firebase/firebaseConfig';
-import { collection, addDoc, getDocs, query, where, orderBy, limit as firestoreLimit, doc, updateDoc, deleteDoc, Timestamp, increment, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, orderBy, limit as firestoreLimit, doc, updateDoc, deleteDoc, Timestamp, increment, serverTimestamp, writeBatch, getDoc } from 'firebase/firestore';
 import { Transaction } from '../firebase/types';
 import { AccountService } from './accountService';
 import { auth } from '../firebase/firebaseConfig';
+import { DailyAggregationService } from './dailyAggregationService';
 
 export class TransactionService {
   private static collection = 'transactions';
@@ -21,6 +22,14 @@ export class TransactionService {
     await updateDoc(accountRef, { 
       balance: increment(amount),
       updatedAt: serverTimestamp()
+    });
+
+    // Update daily aggregation
+    await DailyAggregationService.updateDailyAggregation({
+      id: transactionRef.id,
+      ...transaction,
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now()
     });
   }
 
@@ -82,25 +91,74 @@ export class TransactionService {
   }
 
   static async updateTransaction(id: string, updates: Partial<Transaction>): Promise<void> {
-    try {
-      const docRef = doc(db, this.collection, id);
-      await updateDoc(docRef, {
-        ...updates,
-        updatedAt: Timestamp.now()
+    const docRef = doc(db, this.collection, id);
+    const currentDoc = await getDoc(docRef);
+    
+    if (!currentDoc.exists()) {
+      throw new Error('Transaction not found');
+    }
+
+    const currentData = currentDoc.data() as Transaction;
+    const batch = writeBatch(db);
+
+    // Update transaction
+    batch.update(docRef, {
+      ...updates,
+      updatedAt: serverTimestamp()
+    });
+
+    // If amount or type changed, update account balance
+    if (updates.amount || updates.transactionType) {
+      const oldAmount = currentData.transactionType === 'expense' ? -currentData.amount : currentData.amount;
+      const newAmount = updates.transactionType === 'expense' ? -updates.amount! : updates.amount!;
+      const difference = newAmount - oldAmount;
+
+      const accountRef = doc(db, 'accounts', currentData.accountId);
+      batch.update(accountRef, {
+        balance: increment(difference),
+        updatedAt: serverTimestamp()
       });
-    } catch (error) {
-      console.error('Error updating transaction:', error);
-      throw error;
+    }
+
+    await batch.commit();
+
+    // Rebuild daily aggregations for the affected date
+    if (updates.date || updates.amount || updates.transactionType || updates.categoryId) {
+      const userId = auth.currentUser?.uid;
+      if (userId) {
+        await DailyAggregationService.rebuildAggregations(userId);
+      }
     }
   }
 
   static async deleteTransaction(id: string): Promise<void> {
-    try {
-      const docRef = doc(db, this.collection, id);
-      await deleteDoc(docRef);
-    } catch (error) {
-      console.error('Error deleting transaction:', error);
-      throw error;
+    const docRef = doc(db, this.collection, id);
+    const currentDoc = await getDoc(docRef);
+    
+    if (!currentDoc.exists()) {
+      throw new Error('Transaction not found');
+    }
+
+    const currentData = currentDoc.data() as Transaction;
+    const batch = writeBatch(db);
+
+    // Delete transaction
+    batch.delete(docRef);
+
+    // Update account balance
+    const accountRef = doc(db, 'accounts', currentData.accountId);
+    const amount = currentData.transactionType === 'expense' ? currentData.amount : -currentData.amount;
+    batch.update(accountRef, {
+      balance: increment(amount),
+      updatedAt: serverTimestamp()
+    });
+
+    await batch.commit();
+
+    // Rebuild daily aggregations for the affected date
+    const userId = auth.currentUser?.uid;
+    if (userId) {
+      await DailyAggregationService.rebuildAggregations(userId);
     }
   }
 } 

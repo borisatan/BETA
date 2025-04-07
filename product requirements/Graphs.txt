@@ -1,0 +1,83 @@
+We are designing a database structure that supports efficient financial graphing, similar to Revolut. We need to pre-aggregate transaction data into a new table to avoid recalculating it from raw transaction records each time.
+
+This table will power three types of graphs:
+
+Line chart showing net flow (income – expenses) over time
+
+Bar chart showing total expenses per category across a time range (e.g. month-to-month)
+
+Pie chart showing the expense breakdown by category for a given period
+
+✅ Objective
+Add a new database table that:
+
+Aggregates data per day (or optionally per week/month)
+
+Supports category-based summaries in addition to overall net flow
+
+Can be used to power multiple graph types efficiently
+
+Is easy to keep in sync when transactions change
+
+🧠 Core Design Principles
+Instead of storing raw transaction data in the graph, we precompute and store aggregated financial values for each day (or period).
+
+This table will be updated automatically whenever a transaction is created, updated, or deleted.
+
+It will include net flow totals, and also category-level breakdowns of spending.
+
+📁 Table Design
+Create a new table that includes:
+
+Required fields:
+Date of the aggregation (daily for now)
+
+Account ID (optional — to allow per-account graphs)
+
+Category ID (optional — for category graphs)
+
+Total income (sum of income transactions)
+
+Total expenses (sum of expense transactions)
+
+Net flow (income minus expenses)
+
+Transaction count (optional — could be helpful for data checks)
+
+Timestamps (created_at, updated_at)
+
+📊 Table Usage
+This table will allow:
+
+Line chart: Plot net_flow over time (e.g., past 2 years)
+
+Bar chart: Group by category per day/week/month, showing spending per category over time
+
+Pie chart: Aggregate spending by category for a given date range (e.g., total expenses by category in March)
+
+To support all of these:
+
+You may need two types of rows in the aggregation table:
+
+One for total net flow (category_id = NULL)
+
+One for each category's data (category_id = actual value)
+
+Or alternatively:
+
+Store all rows with a category_id, and use a special "uncategorized" or "all" row for net flow totals
+
+This should be considered when defining uniqueness constraints — for example:
+
+One unique row per (date, category_id, account_id)
+
+🔁 Sync Requirements
+The system must ensure the table stays updated:
+
+When a transaction is added, the correct aggregation row is created or updated
+
+When a transaction is edited (especially if amount, date, category, or type changes), the relevant rows are updated
+
+When a transaction is deleted, the corresponding aggregated values are reduced
+
+Also, implement a way to rebuild the entire table from scratch from the Transactions table, in case of corruption or bugs.

@@ -76,4 +76,16 @@ export interface RecurringIncome extends Timestamps {
   recurrenceType: 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'custom';
   recurrenceInterval: number;
   nextRecurrenceDate: Timestamp;
+}
+
+export interface DailyAggregation extends Timestamps {
+  id: string;
+  userId: string;
+  date: Timestamp;
+  accountId?: string;  // Optional for per-account graphs
+  categoryId?: string; // Optional for category graphs
+  totalIncome: number;
+  totalExpenses: number;
+  netFlow: number;
+  transactionCount: number;
 } 
