@@ -1947,7 +1947,7 @@ const Dashboard = () => {
 
       // Sort by date, newest first
       const sortedTransactions = [...transactions]
-        .sort((a, b) => b.date.toDate().getTime() - a.date.toDate().getTime())
+        .sort((a: Transaction, b: Transaction) => b.date.toDate().getTime() - a.date.toDate().getTime())
         .slice(0, 5); // Take only the 5 most recent
 
       setRecentTransactions(sortedTransactions);
@@ -2031,35 +2031,20 @@ const Dashboard = () => {
         throw new Error("User not logged in");
       }
 
-      // Use cached transactions if available
-      const cacheKey = `${timeFrame}-${userId}`;
-      const cache = transactionCache[cacheKey];
-      let transactions: Transaction[] = [];
+      const { currentStart, currentEnd } = getDateRanges(timeFrame);
 
-      if (cache && cache.transactions.length > 0) {
-        console.log(`Using cached transactions for category ${categoryName}`);
-        transactions = cache.transactions;
-      } else {
-        // Fallback to fetching if needed
-        const { currentStart, currentEnd } = getDateRanges(timeFrame);
-        transactions = await TransactionService.getTransactionsByDateRange(
-          userId,
-          currentStart,
-          currentEnd
-        );
-      }
-
-      // Filter transactions for the selected category
-      const filteredTransactions = transactions.filter(
-        (t) =>
-          t.categoryId === categoryId ||
-          (t as any).category_id === categoryId ||
-          (t as any).categoryID === categoryId
+      // Directly fetch transactions filtered by both timeframe and category
+      console.log(`Fetching transactions for category ${categoryName} in ${timeFrame} timeframe`);
+      const transactions = await TransactionService.getTransactionsByCategoryAndDateRange(
+        userId,
+        categoryId,
+        currentStart,
+        currentEnd
       );
 
       // Sort transactions by date (newest first)
-      const sortedTransactions = filteredTransactions.sort(
-        (a, b) => b.date.toDate().getTime() - a.date.toDate().getTime()
+      const sortedTransactions = transactions.sort(
+        (a: Transaction, b: Transaction) => b.date.toDate().getTime() - a.date.toDate().getTime()
       );
 
       console.log(
@@ -2442,23 +2427,6 @@ const Dashboard = () => {
                     }`}
                   >
                     {selectedCategory.transactionCount}
-                  </Text>
-                </View>
-                <View className="flex-row justify-between mt-1">
-                  <Text
-                    className={isDarkMode ? "text-gray-300" : "text-gray-600"}
-                  >
-                    % of Total:
-                  </Text>
-                  <Text
-                    className={`font-bold ${
-                      isDarkMode ? "text-white" : "text-gray-900"
-                    }`}
-                  >
-                    {selectedCategory.percentage < 1
-                      ? selectedCategory.percentage.toFixed(1)
-                      : selectedCategory.percentage.toFixed(0)}
-                    %
                   </Text>
                 </View>
               </View>

@@ -73,6 +73,56 @@ export class TransactionService {
     }
   }
 
+  // New method to fetch transactions by category and date range
+  static async getTransactionsByCategoryAndDateRange(
+    userId: string,
+    categoryId: string,
+    startDate: Date,
+    endDate: Date
+  ): Promise<Transaction[]> {
+    try {
+      console.log('Fetching transactions with params:', {
+        userId,
+        categoryId,
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString()
+      });
+
+      // Create query with both category and date range filters
+      const q = query(
+        collection(db, this.collection),
+        where('userId', '==', userId),
+        where('categoryId', '==', categoryId),
+        where('date', '>=', Timestamp.fromDate(startDate)),
+        where('date', '<=', Timestamp.fromDate(endDate)),
+        orderBy('date', 'desc')
+      );
+
+      console.log('Query constructed:', q);
+
+      const querySnapshot = await getDocs(q);
+      
+      console.log('Query results:', {
+        totalDocs: querySnapshot.size,
+        empty: querySnapshot.empty,
+        docs: querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }))
+      });
+
+      const transactions = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Transaction[];
+
+      return transactions;
+    } catch (error) {
+      console.error('Error fetching transactions by category and date range:', error);
+      throw error;
+    }
+  }
+
   static async getAccountTransactions(accountId: string): Promise<Transaction[]> {
     try {
       const userId = auth.currentUser?.uid;
