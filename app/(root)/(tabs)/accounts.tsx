@@ -52,6 +52,12 @@ const Accounts = () => {
   const [recurringIncomes, setRecurringIncomes] = useState<RecurringIncome[]>([]);
   const [editingRecurringIncome, setEditingRecurringIncome] = useState<RecurringIncome | null>(null);
   const [showEditRecurringIncomeModal, setShowEditRecurringIncomeModal] = useState(false);
+  // Add state for tracking recurring income processing
+  const [isProcessingRecurringIncomes, setIsProcessingRecurringIncomes] = useState(false);
+  const [recurringIncomeProcessingResult, setRecurringIncomeProcessingResult] = useState<{
+    processed: number;
+    errors: number;
+  } | null>(null);
 
   useEffect(() => {
     fetchAccounts();
@@ -69,6 +75,10 @@ const Accounts = () => {
         });
         return;
       }
+      
+      // Process any due recurring incomes before fetching accounts
+      await processRecurringIncomes(userId);
+      
       const userAccounts = await AccountService.getUserAccounts(userId);
       setAccounts(userAccounts);
     } catch (error) {
@@ -80,6 +90,49 @@ const Accounts = () => {
       });
     } finally {
       setIsLoading(false); // Set loading to false when done
+    }
+  };
+
+  // New function to check and process recurring incomes
+  const processRecurringIncomes = async (userId: string) => {
+    setIsProcessingRecurringIncomes(true);
+    try {
+      console.log('Checking for due recurring incomes...');
+      const result = await AccountService.processAllDueRecurringIncomes(userId);
+      setRecurringIncomeProcessingResult(result);
+      
+      if (result.processed > 0) {
+        Toast.show({
+          type: 'success',
+          text1: 'Recurring Income',
+          text2: `Processed ${result.processed} recurring income payments`,
+          position: 'bottom',
+          visibilityTime: 4000,
+        });
+      }
+      
+      if (result.errors > 0) {
+        Toast.show({
+          type: 'error',
+          text1: 'Warning',
+          text2: `Failed to process ${result.errors} recurring incomes`,
+          position: 'bottom',
+          visibilityTime: 4000,
+        });
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('Error processing recurring incomes:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Failed to process recurring incomes',
+        position: 'bottom',
+      });
+      return { processed: 0, errors: 0 };
+    } finally {
+      setIsProcessingRecurringIncomes(false);
     }
   };
 
@@ -477,19 +530,68 @@ const Accounts = () => {
               Manage your financial accounts
             </Text>
           </View>
-          <TouchableOpacity 
-            onPress={() => setIsEditMode(!isEditMode)}
-            className={`px-4 py-2 rounded-lg ${
-              isEditMode 
-                ? (isDarkMode ? "bg-blue-900" : "bg-blue-600")
-                : (isDarkMode ? "bg-gray-700" : "bg-gray-200")
-            }`}
-          >
-            <Text className={isEditMode ? "text-white" : (isDarkMode ? "text-gray-300" : "text-gray-800")}>
-              {isEditMode ? "Done" : "Edit"}
-            </Text>
-          </TouchableOpacity>
+          <View className="flex-row">
+            <TouchableOpacity 
+              onPress={async () => {
+                const userId = auth.currentUser?.uid;
+                if (userId) {
+                  await processRecurringIncomes(userId);
+                  fetchAccounts();
+                }
+              }}
+              className={`px-4 py-2 rounded-lg mr-2 ${
+                isDarkMode ? "bg-gray-700" : "bg-gray-200"
+              }`}
+              disabled={isProcessingRecurringIncomes}
+            >
+              <MaterialIcons 
+                name="refresh" 
+                size={20} 
+                color={isDarkMode ? "#E5E7EB" : "#1F2937"} 
+              />
+            </TouchableOpacity>
+            <TouchableOpacity 
+              onPress={() => setIsEditMode(!isEditMode)}
+              className={`px-4 py-2 rounded-lg ${
+                isEditMode 
+                  ? (isDarkMode ? "bg-blue-900" : "bg-blue-600")
+                  : (isDarkMode ? "bg-gray-700" : "bg-gray-200")
+              }`}
+            >
+              <Text className={isEditMode ? "text-white" : (isDarkMode ? "text-gray-300" : "text-gray-800")}>
+                {isEditMode ? "Done" : "Edit"}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
+
+        {/* Recurring Income Processing Indicator */}
+        {isProcessingRecurringIncomes && (
+          <View className={`p-4 rounded-lg mb-4 ${
+            isDarkMode ? "bg-gray-800" : "bg-gray-100"
+          }`}>
+            <View className="flex-row items-center">
+              <ActivityIndicator size="small" color={isDarkMode ? "#1E40AF" : "#1E3A8A"} />
+              <Text className={`ml-2 ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                Processing recurring income payments...
+              </Text>
+            </View>
+          </View>
+        )}
+        
+        {/* Recurring Income Processing Results */}
+        {!isProcessingRecurringIncomes && recurringIncomeProcessingResult && recurringIncomeProcessingResult.processed > 0 && (
+          <View className={`p-4 rounded-lg mb-4 ${
+            isDarkMode ? "bg-blue-900" : "bg-blue-100"
+          }`}>
+            <View className="flex-row items-center">
+              <MaterialIcons name="check-circle" size={20} color={isDarkMode ? "#93C5FD" : "#1E3A8A"} />
+              <Text className={`ml-2 ${isDarkMode ? "text-blue-200" : "text-blue-800"}`}>
+                Processed {recurringIncomeProcessingResult.processed} recurring income payments
+              </Text>
+            </View>
+          </View>
+        )}
 
         {/* Add Account Button */}
         <TouchableOpacity 

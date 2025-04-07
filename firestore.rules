@@ -75,10 +75,33 @@ service cloud.firestore {
     // Daily Aggregations rules
     match /dailyAggregations/{aggregationId} {
       allow read: if isAuthenticated() && isOwner(resource.data.userId);
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      allow update: if isAuthenticated() && isOwner(resource.data.userId);
+      allow create: if isAuthenticated() 
+        && request.resource.data.userId == request.auth.uid
+        && (
+          'totalIncome' in request.resource.data && request.resource.data.totalIncome is number
+          && 'totalExpenses' in request.resource.data && request.resource.data.totalExpenses is number
+          && 'netFlow' in request.resource.data && request.resource.data.netFlow is number
+          && 'transactionCount' in request.resource.data && request.resource.data.transactionCount is number
+          && 'date' in request.resource.data && request.resource.data.date is timestamp
+          && 'createdAt' in request.resource.data && request.resource.data.createdAt is timestamp
+          && 'updatedAt' in request.resource.data && request.resource.data.updatedAt is timestamp
+          && request.resource.data.netFlow == (request.resource.data.totalIncome - request.resource.data.totalExpenses)
+          && request.resource.data.transactionCount >= 0
+        );
+      allow update: if isAuthenticated() 
+        && isOwner(resource.data.userId)
+        && request.resource.data.userId == resource.data.userId
+        && (
+          'totalIncome' in request.resource.data && request.resource.data.totalIncome is number
+          && 'totalExpenses' in request.resource.data && request.resource.data.totalExpenses is number
+          && 'netFlow' in request.resource.data && request.resource.data.netFlow is number
+          && 'transactionCount' in request.resource.data && request.resource.data.transactionCount is number
+          && 'date' in request.resource.data && request.resource.data.date is timestamp
+          && 'updatedAt' in request.resource.data && request.resource.data.updatedAt is timestamp
+          && request.resource.data.netFlow == (request.resource.data.totalIncome - request.resource.data.totalExpenses)
+          && request.resource.data.transactionCount >= 0
+        );
       allow delete: if isAuthenticated() && isOwner(resource.data.userId);
-      // Allow list operation for querying aggregations (needed for dashboard)
       allow list: if isAuthenticated() && request.query.limit <= 1000;
     }
   }

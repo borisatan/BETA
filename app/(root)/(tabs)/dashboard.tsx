@@ -519,8 +519,8 @@ const Dashboard = () => {
             name: item.name,
             amount: item.value,
             color: getColorForIndex(pieChartData.indexOf(item)),
-            legendFontColor: "#FFFFFF",
-            legendFontSize: 12,
+        legendFontColor: "#FFFFFF",
+        legendFontSize: 12,
           })));
           setCategorySummaries(summaries);
         } else if (!isLoading && !isRefreshing) {
@@ -996,7 +996,7 @@ const Dashboard = () => {
     
     fetchDashboardData();
   }, [timeFrame]);
-  
+
   // Add effect to recalculate category data when view mode changes
   useEffect(() => {
     console.log(`Category view mode changed to ${categoryViewMode}, refreshing category data...`);
@@ -1081,9 +1081,9 @@ const Dashboard = () => {
         setIsLoading(false);
         return;
       }
-      
+
       const { currentStart, currentEnd, previousStart, previousEnd } = getDateRanges(timeFrame);
-      
+
       // Check if we have preloaded transactions and use them if available
       const preloadedTransactions = PreloadService.getPreloadedTransactions(timeFrame);
       if (preloadedTransactions && preloadedTransactions.length > 0 && !isRefreshing) {
@@ -1122,7 +1122,7 @@ const Dashboard = () => {
       let previousTransactionsData: Transaction[] = [];
       
       try {
-        // Fetch transactions for both periods
+      // Fetch transactions for both periods
         [currentTransactionsData, previousTransactionsData] = await Promise.all([
           TransactionService.getTransactionsByDateRange(userId, currentStart, currentEnd),
           TransactionService.getTransactionsByDateRange(userId, previousStart, previousEnd)
@@ -1328,8 +1328,8 @@ const Dashboard = () => {
           .sort((a, b) => b.amount - a.amount);
         
         console.log(`[Dashboard] Generated ${pieData.length} pie chart items from aggregations`);
-        
-        // Update state with new data
+
+      // Update state with new data
         setPieData(pieData);
         setCategorySummaries(summaries);
       }).catch(error => {

@@ -324,4 +324,50 @@ export class AccountService {
       throw error;
     }
   }
+
+  static async processAllDueRecurringIncomes(userId: string): Promise<{ processed: number, errors: number }> {
+    try {
+      if (!userId) {
+        throw new Error('User not authenticated');
+      }
+
+      // Get the current date
+      const now = new Date();
+      const currentTimestamp = Timestamp.fromDate(now);
+      
+      // Query for all recurring incomes that are due (nextRecurrenceDate <= now)
+      const q = query(
+        collection(db, this.recurringIncomeCollection),
+        where('userId', '==', userId),
+        where('nextRecurrenceDate', '<=', currentTimestamp)
+      );
+      
+      const querySnapshot = await getDocs(q);
+      console.log(`Found ${querySnapshot.docs.length} recurring incomes due for processing`);
+      
+      let processed = 0;
+      let errors = 0;
+      
+      // Process each due recurring income
+      for (const doc of querySnapshot.docs) {
+        try {
+          const recurringIncome = { id: doc.id, ...doc.data() } as RecurringIncome;
+          
+          // Use the existing processRecurringIncome method to handle the income
+          await this.processRecurringIncome(recurringIncome.id);
+          processed++;
+          
+          console.log(`Successfully processed recurring income ${recurringIncome.id} for account ${recurringIncome.accountId}`);
+        } catch (error) {
+          console.error(`Error processing recurring income ${doc.id}:`, error);
+          errors++;
+        }
+      }
+      
+      return { processed, errors };
+    } catch (error) {
+      console.error('Error processing due recurring incomes:', error);
+      throw error;
+    }
+  }
 } 
