@@ -107,9 +107,23 @@ export const CategoryService = {
   },
 
   async getUserCategories(userId: string) {
-    const q = query(collection(db, 'categories'), where('userId', '==', userId));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Category[];
+    console.log("[CategoryService] Fetching categories for user:", userId);
+    try {
+      const q = query(collection(db, 'categories'), where('userId', '==', userId));
+      const snapshot = await getDocs(q);
+      const categories = snapshot.docs.map(doc => ({ 
+        id: doc.id, 
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate(),
+        updatedAt: doc.data().updatedAt?.toDate()
+      })) as Category[];
+      
+      console.log("[CategoryService] Successfully fetched categories:", categories.length);
+      return categories;
+    } catch (error) {
+      console.error("[CategoryService] Error fetching categories:", error);
+      throw error;
+    }
   }
 };
 

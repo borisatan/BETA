@@ -98,7 +98,15 @@ export class TransactionService {
         orderBy('date', 'desc')
       );
 
-      console.log('Query constructed:', q);
+      console.log('Query constructed:', {
+        collection: this.collection,
+        filters: [
+          { field: 'userId', operator: '==', value: userId },
+          { field: 'categoryId', operator: '==', value: categoryId },
+          { field: 'date', operator: '>=', value: startDate.toISOString() },
+          { field: 'date', operator: '<=', value: endDate.toISOString() }
+        ]
+      });
 
       const querySnapshot = await getDocs(q);
       
@@ -107,14 +115,27 @@ export class TransactionService {
         empty: querySnapshot.empty,
         docs: querySnapshot.docs.map(doc => ({
           id: doc.id,
-          ...doc.data()
+          data: doc.data()
         }))
       });
+
+      if (querySnapshot.empty) {
+        console.log('No transactions found for the given filters');
+        return [];
+      }
 
       const transactions = querySnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as Transaction[];
+      
+      console.log('Processed transactions:', transactions.map(t => ({
+        id: t.id,
+        description: t.description,
+        amount: t.amount,
+        date: t.date.toDate().toISOString(),
+        categoryId: t.categoryId
+      })));
 
       return transactions;
     } catch (error) {
@@ -236,6 +257,46 @@ export class TransactionService {
     const userId = auth.currentUser?.uid;
     if (userId) {
       await DailyAggregationService.rebuildAggregations(userId);
+    }
+  }
+
+  static async getLatestTransaction(userId: string): Promise<Transaction | null> {
+    try {
+      const transactionsRef = collection(db, "transactions");
+      const q = query(
+        transactionsRef,
+        where("userId", "==", userId),
+        orderBy("date", "desc"),
+        firestoreLimit(1)
+      );
+      
+      const querySnapshot = await getDocs(q);
+      if (querySnapshot.empty) {
+        return null;
+      }
+      
+      const doc = querySnapshot.docs[0];
+      return {
+        id: doc.id,
+        ...doc.data(),
+        date: doc.data().date as Timestamp
+      } as Transaction;
+    } catch (error) {
+      console.error("[TransactionService] Error getting latest transaction:", error);
+      return null;
+    }
+  }
+
+  static async getTransaction(transactionId: string): Promise<Transaction | null> {
+    try {
+      const transactionDoc = await getDoc(doc(db, this.collection, transactionId));
+      if (transactionDoc.exists()) {
+        return { id: transactionDoc.id, ...transactionDoc.data() } as Transaction;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error getting transaction:', error);
+      return null;
     }
   }
 } 

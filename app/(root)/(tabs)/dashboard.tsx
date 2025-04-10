@@ -312,7 +312,7 @@ const Dashboard = () => {
   >("subcategories");
 
   // Add state for category loading
-  const [isCategoryLoading, setIsCategoryLoading] = useState(false);
+  const [isCategoryLoading, setIsCategoryLoading] = useState(true);
 
   // Add state for category dropdown
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
@@ -634,21 +634,27 @@ const Dashboard = () => {
     categorySummaries: CategorySummaryData[];
     pieData: PieChartData[];
   }> => {
-    // Get all user categories
-    const categories = await CategoryService.getUserCategories(
-      auth.currentUser?.uid || ""
-    );
+    // Fetch categories and main categories needed for processing
+    let categories: any[] | null = await PreloadService.getPreloadedCategories();
+    let mainCategories: any[] | null = await PreloadService.getPreloadedMainCategories();
+    const userId = auth.currentUser?.uid || "";
 
-    // If we're in main categories mode, fetch main categories as well
-    let mainCategories: MainCategory[] = [];
-    if (viewMode === "main") {
-      mainCategories = await CategoryService.getUserMainCategories(
-        auth.currentUser?.uid || ""
-      );
-      console.log("Main categories fetched:", mainCategories.length);
+    // Fetch if not preloaded
+    if (!categories || categories.length === 0) {
+      console.log("[Dashboard] Fetching subcategories for summary preparation...");
+      categories = await CategoryService.getUserCategories(userId);
+    }
+    if (!mainCategories || mainCategories.length === 0) {
+      console.log("[Dashboard] Fetching main categories for summary preparation...");
+      mainCategories = await CategoryService.getUserMainCategories(userId);
     }
 
+    // Ensure we have arrays, even if empty
+    categories = categories || [];
+    mainCategories = mainCategories || [];
+
     console.log("Categories fetched:", categories.length);
+    console.log("Main Categories fetched:", mainCategories.length); // Added log for main categories
     console.log("Total transactions:", transactions.length);
     console.log("Current view mode:", viewMode);
 
@@ -662,18 +668,14 @@ const Dashboard = () => {
     // Build lookup maps for regular categories
     categories.forEach((category) => {
       categoryById[category.id] = category;
-      categoryByName[category.name.toLowerCase()] = category;
-
-      // Map this category to its main category
-      if (category.mainCategory) {
-        categoryToMainCategory[category.id] = category.mainCategory;
-      }
+      categoryByName[category.name] = category;
+      categoryToMainCategory[category.id] = category.mainCategory;
     });
 
     // Build lookup maps for main categories
     mainCategories.forEach((mainCategory) => {
       mainCategoryById[mainCategory.id] = mainCategory;
-      mainCategoryByName[mainCategory.name.toLowerCase()] = mainCategory;
+      mainCategoryByName[mainCategory.name] = mainCategory;
     });
 
     console.log(
@@ -873,7 +875,7 @@ const Dashboard = () => {
             logo: matchedMainCategory.icon || "category",
             transactionCount:
               mainCategoryTransactionCounts[mainCategoryName] || 0,
-            amount: amount,
+            amount,
             percentage: totalSpending > 0 ? (amount / totalSpending) * 100 : 0,
             color: getColorForIndex(index),
           });
@@ -1105,24 +1107,39 @@ const Dashboard = () => {
 
   // Function to clear cache when app goes to background
   const clearCacheOnBackground = () => {
-    console.log("App entering background, clearing transaction cache");
+    console.log("[Dashboard] App entering background, clearing transaction cache but preserving categories");
+    
+    // Clear only transaction cache, not categories
     Object.keys(transactionCache).forEach((key) => {
       delete transactionCache[key];
+    });
+    
+    // Use the preload service to clear time-specific data but keep categories
+    const timeFrames: ("week" | "month" | "6months" | "year")[] = ["week", "month", "6months", "year"];
+    timeFrames.forEach(frame => {
+      PreloadService.clearPreloadedData(frame);
     });
   };
 
   const handleTimeFrameChange = (
     newTimeFrame: "week" | "month" | "6months" | "year"
   ) => {
+    // Only proceed if the timeframe has actually changed
+    if (newTimeFrame === timeFrame) {
+      console.log("[Dashboard] Same timeframe selected, skipping update");
+      return;
+    }
+
     console.log(`[Dashboard] Time frame changed to ${newTimeFrame}`);
     setIsLoading(true);
     setTimeFrame(newTimeFrame);
     // fetchDashboardData will be triggered by the useEffect that watches timeFrame
   };
 
+  // Modify the useEffect that watches timeFrame to handle both category view modes
   useEffect(() => {
     console.log(
-      `Timeframe changed to ${timeFrame}, fetching dashboard data...`
+      `[Dashboard] Timeframe changed to ${timeFrame}, fetching dashboard data with category view mode: ${categoryViewMode}...`
     );
 
     // Check if we have preloaded data first
@@ -1133,13 +1150,20 @@ const Dashboard = () => {
         PreloadService.getPreloadedTransactions(timeFrame);
 
       if (preloadedData && preloadedTransactions) {
-        console.log("Using preloaded dashboard data!");
+        console.log("[Dashboard] Using preloaded dashboard data!");
         setHasPreloadedData(true);
+        // Even with preloaded data, we need to update the view for the current category mode
+        if (categoryViewMode === "main") {
+          console.log("[Dashboard] In main categories mode, processing preloaded transactions for main categories");
+          processMainCategoryData(preloadedTransactions);
+        }
+        setIsLoading(false); // Ensure loading state is cleared when using preloaded data
+        return;
       }
     }
 
     fetchDashboardData();
-  }, [timeFrame]);
+  }, [timeFrame, categoryViewMode]); // Add categoryViewMode as a dependency to re-fetch when it changes
 
   // Add effect to recalculate category data when view mode changes
   useEffect(() => {
@@ -1213,10 +1237,32 @@ const Dashboard = () => {
     // Set up AppState listener for background state
     const appStateListener = AppState.addEventListener(
       "change",
-      (nextAppState: AppStateStatus) => {
+      async (nextAppState: AppStateStatus) => {
         if (nextAppState === "background") {
-          console.log("App going to background, clearing transaction cache");
+          console.log("[Dashboard] App going to background, clearing transaction cache");
+          
+          // Before clearing cache, save categories to AsyncStorage if they're not already there
+          const categories = await PreloadService.getPreloadedCategories();
+          const mainCategories = await PreloadService.getPreloadedMainCategories();
+          
+          // Only clear the transaction cache, not the category cache
           clearCacheOnBackground();
+        } else if (nextAppState === "active") {
+          // App coming back to foreground, check if categories need to be reloaded
+          console.log("[Dashboard] App returning to foreground, checking category cache");
+          
+          const userId = auth.currentUser?.uid;
+          if (userId) {
+            // Verify categories are loaded
+            const categories = await PreloadService.getPreloadedCategories();
+            const mainCategories = await PreloadService.getPreloadedMainCategories();
+            
+            if (!categories || !mainCategories) {
+              console.log("[Dashboard] Categories not found after returning to foreground, reloading...");
+              // Trigger category preloading
+              PreloadService.preloadDashboardData(timeFrame, true);
+            }
+          }
         }
       }
     );
@@ -1228,11 +1274,83 @@ const Dashboard = () => {
     return () => {
       appStateListener.remove();
     };
-  }, []);
+  }, [timeFrame]);
+
+  // Add a new loading state specifically for categories
+  const [isCategoriesPreloaded, setIsCategoriesPreloaded] = useState(false);
+
+  useEffect(() => {
+    const preloadCategories = async () => {
+      try {
+        const userId = auth.currentUser?.uid;
+        if (!userId) {
+          console.error("[Dashboard] No user ID found for category preloading");
+          return;
+        }
+
+        // Check if we already have valid categories
+        const existingCategories = await PreloadService.getPreloadedCategories();
+        const existingMainCategories = await PreloadService.getPreloadedMainCategories();
+        const needsFetch = !existingCategories || !existingMainCategories || existingCategories.length === 0 || existingMainCategories.length === 0;
+
+        if (needsFetch) {
+          try {
+            const [newCategories, newMainCategories] = await Promise.all([
+              CategoryService.getUserCategories(userId),
+              CategoryService.getUserMainCategories(userId)
+            ]);
+            
+            if (!newCategories || !newMainCategories || newCategories.length === 0 || newMainCategories.length === 0) {
+              console.error("[Dashboard] Failed to fetch valid categories:", {
+                categoriesLength: newCategories?.length || 0,
+                mainCategoriesLength: newMainCategories?.length || 0
+              });
+              throw new Error("Failed to fetch valid categories");
+            }
+            
+            // Force preload service to update its cache
+            await PreloadService.preloadDashboardData(timeFrame, true);
+            
+            console.log(`[Dashboard] Successfully fetched ${newCategories.length} categories and ${newMainCategories.length} main categories`);
+            
+            // Check for debug info
+            console.log("[Dashboard] Fetched category debug info:", {
+              categorySample: newCategories.slice(0, 3).map(c => ({id: c.id, name: c.name})),
+              mainCategorySample: newMainCategories.slice(0, 3).map(c => ({id: c.id, name: c.name}))
+            });
+
+            // Only mark as preloaded if we have valid categories
+            if (newCategories && newCategories.length > 0 && newMainCategories && newMainCategories.length > 0) {
+              setIsCategoriesPreloaded(true);
+              console.log("[Dashboard] Categories successfully preloaded");
+            } else {
+              console.error("[Dashboard] No valid categories found after preloading process");
+            }
+          } catch (error) {
+            console.error("[Dashboard] Error fetching categories:", error);
+            // Don't mark as preloaded if we failed to fetch
+            return;
+          }
+        } else {
+          // We already have valid categories
+          setIsCategoriesPreloaded(true);
+          console.log("[Dashboard] Using existing categories:", {
+            categoriesCount: existingCategories.length,
+            mainCategoriesCount: existingMainCategories.length
+          });
+        }
+      } catch (error) {
+        console.error("[Dashboard] Error in category preloading:", error);
+        // Don't mark as preloaded if there was an error
+      }
+    };
+
+    preloadCategories();
+  }, [timeFrame]);
 
   const fetchDashboardData = async (isRefreshing = false): Promise<void> => {
     console.log(
-      `[Dashboard] Fetching dashboard data for timeframe: ${timeFrame}`
+      `[Dashboard] Fetching dashboard data for timeframe: ${timeFrame}, category mode: ${categoryViewMode}`
     );
     setIsLoading(true);
 
@@ -1242,6 +1360,18 @@ const Dashboard = () => {
         console.error("[Dashboard] No user ID found for dashboard data fetch");
         setIsLoading(false);
         return;
+      }
+
+      // First ensure categories are preloaded
+      if (!isCategoriesPreloaded) {
+        const categories = await PreloadService.getPreloadedCategories();
+        const mainCategories = await PreloadService.getPreloadedMainCategories();
+        
+        if (!categories || !mainCategories) {
+          console.log("[Dashboard] Waiting for categories to be preloaded before continuing");
+          setIsLoading(false);
+          return;
+        }
       }
 
       const { currentStart, currentEnd, previousStart, previousEnd } =
@@ -1256,13 +1386,13 @@ const Dashboard = () => {
         !isRefreshing
       ) {
         console.log(
-          `[Dashboard] Using ${preloadedTransactions.length} preloaded transactions`
+          `[Dashboard] Using ${preloadedTransactions.length} preloaded transactions with category mode: ${categoryViewMode}`
         );
 
         // Store transactions for recent transactions display
         setCurrentTransactions(preloadedTransactions);
 
-        // For subcategory view, get aggregations
+        // Process based on current category view mode
         if (categoryViewMode === "subcategories") {
           const preloadedAggregations =
             PreloadService.getPreloadedAggregations(timeFrame);
@@ -1281,6 +1411,7 @@ const Dashboard = () => {
           }
         } else {
           // For main category view, use the transactions directly
+          console.log("[Dashboard] Processing main category data from preloaded transactions");
           processMainCategoryData(preloadedTransactions);
           prepareRecentTransactions(preloadedTransactions);
 
@@ -1290,7 +1421,7 @@ const Dashboard = () => {
       }
 
       // If we get here, we need to fetch fresh data
-      console.log(`[Dashboard] Fetching fresh data for ${timeFrame}`);
+      console.log(`[Dashboard] Fetching fresh data for ${timeFrame} with category mode: ${categoryViewMode}`);
       let currentTransactionsData: Transaction[] = [];
       let previousTransactionsData: Transaction[] = [];
 
@@ -1315,61 +1446,75 @@ const Dashboard = () => {
           `[Dashboard] Fetched ${currentTransactionsData.length} current and ${previousTransactionsData.length} previous transactions`
         );
 
+        // Store the latest transaction for this timeframe
+        if (currentTransactionsData.length > 0) {
+          const latestTransaction = currentTransactionsData.reduce((latest, current) => {
+            return current.date.toDate().getTime() > latest.date.toDate().getTime() ? current : latest;
+          });
+          PreloadService.setLastFetchedTransaction(timeFrame, latestTransaction);
+        }
+
         setCurrentTransactions(currentTransactionsData);
         setPreviousTransactions(previousTransactionsData);
         prepareRecentTransactions(currentTransactionsData);
+        
+        // Process based on current category view mode
+        if (categoryViewMode === "subcategories") {
+          try {
+            const [currentAggregations, previousAggregations] = await Promise.all(
+              [
+                DailyAggregationService.getDailyAggregations(
+                  userId,
+                  currentStart,
+                  currentEnd
+                ),
+                DailyAggregationService.getDailyAggregations(
+                  userId,
+                  previousStart,
+                  previousEnd
+                ),
+              ]
+            );
+
+            console.log(
+              `[Dashboard] Fetched ${currentAggregations.length} current aggregations`
+            );
+
+            processAggregations(currentAggregations);
+
+            // Cache the data for future use
+            if (
+              currentAggregations.length > 0 &&
+              currentTransactionsData.length > 0
+            ) {
+              PreloadService.preloadDashboardData(timeFrame);
+            }
+          } catch (error) {
+            console.error("[Dashboard] Error fetching aggregations:", error);
+            setPieData([]);
+            setCategorySummaries([]);
+            setSpendingData({
+              currentPeriod: [],
+              previousPeriod: [],
+              averageSpending: 0,
+              percentageChange: 0,
+              maxValue: 0,
+            });
+          }
+        } else {
+          // For main category view, process transactions directly
+          console.log("[Dashboard] Processing main category data from fresh transactions");
+          await processMainCategoryData(currentTransactionsData);
+          
+          // Cache the data for future use
+          if (currentTransactionsData.length > 0) {
+            PreloadService.preloadDashboardData(timeFrame);
+          }
+        }
       } catch (error) {
         console.error("[Dashboard] Error fetching transactions:", error);
         setCurrentTransactions([]);
         setPreviousTransactions([]);
-      }
-
-      // For subcategory view, fetch and process daily aggregations
-      if (categoryViewMode === "subcategories") {
-        try {
-          const [currentAggregations, previousAggregations] = await Promise.all(
-            [
-              DailyAggregationService.getDailyAggregations(
-                userId,
-                currentStart,
-                currentEnd
-              ),
-              DailyAggregationService.getDailyAggregations(
-                userId,
-                previousStart,
-                previousEnd
-              ),
-            ]
-          );
-
-          console.log(
-            `[Dashboard] Fetched ${currentAggregations.length} current aggregations`
-          );
-
-          processAggregations(currentAggregations);
-
-          // Cache the data for future use
-          if (
-            currentAggregations.length > 0 &&
-            currentTransactionsData.length > 0
-          ) {
-            PreloadService.preloadDashboardData(timeFrame);
-          }
-        } catch (error) {
-          console.error("[Dashboard] Error fetching aggregations:", error);
-          setPieData([]);
-          setCategorySummaries([]);
-          setSpendingData({
-            currentPeriod: [],
-            previousPeriod: [],
-            averageSpending: 0,
-            percentageChange: 0,
-            maxValue: 0,
-          });
-        }
-      } else {
-        // For main category view, process transactions directly
-        processMainCategoryData(currentTransactionsData);
       }
     } catch (error) {
       console.error("[Dashboard] Error in fetchDashboardData:", error);
@@ -1472,86 +1617,139 @@ const Dashboard = () => {
   };
 
   // Process category data from aggregations
-  const processCategoryData = (aggregations: DailyAggregation[]): void => {
+  const processCategoryData = async (aggregations: DailyAggregation[]): Promise<void> => {
     try {
-      // Group by category ID and sum expenses
+      // Calculate totals for each category
       const categoryTotals: Record<string, number> = {};
       const categoryTransactionCounts: Record<string, number> = {};
 
-      for (const agg of aggregations) {
+      aggregations.forEach((agg) => {
         if (agg.categoryId) {
-          if (!categoryTotals[agg.categoryId]) {
-            categoryTotals[agg.categoryId] = 0;
-            categoryTransactionCounts[agg.categoryId] = 0;
-          }
-
-          categoryTotals[agg.categoryId] += agg.totalExpenses || 0;
-          categoryTransactionCounts[agg.categoryId] +=
-            agg.transactionCount || 0;
+          categoryTotals[agg.categoryId] = (categoryTotals[agg.categoryId] || 0) + (agg.totalExpenses || 0);
+          categoryTransactionCounts[agg.categoryId] = (categoryTransactionCounts[agg.categoryId] || 0) + (agg.transactionCount || 0);
         }
-      }
+      });
 
-      // Get categories to map IDs to names
-      CategoryService.getUserCategories(auth.currentUser?.uid || "")
-        .then((categories) => {
-          const categoryMap = new Map(categories.map((cat) => [cat.id, cat]));
+      console.log("[Dashboard] Processing category data with",
+        Object.keys(categoryTotals).length > 0 ? 
+          Object.keys(categoryTotals).slice(0, 5) : 
+          "No categories found");
 
-          // Generate pie chart data
-          const pieData = Object.entries(categoryTotals)
-            .filter(([_, amount]) => amount > 0)
-            .map(([categoryId, amount], index) => {
-              const category = categoryMap.get(categoryId);
-              return {
-                name: category?.name || "Unknown",
-                amount,
-                color: getColorForIndex(index),
-                legendFontColor: "#FFFFFF",
-                legendFontSize: 12,
-              };
-            })
-            .sort((a, b) => b.amount - a.amount);
-
-          // Calculate total spending for percentages
-          const totalSpending = pieData.reduce(
-            (sum, item) => sum + item.amount,
-            0
-          );
-
-          // Generate category summaries
-          const summaries = Object.entries(categoryTotals)
-            .filter(([_, amount]) => amount > 0)
-            .map(([categoryId, amount], index) => {
-              const category = categoryMap.get(categoryId);
-              return {
-                id: categoryId,
-                name: category?.name || "Unknown",
-                logo: category?.icon || "question-mark",
-                transactionCount: categoryTransactionCounts[categoryId] || 0,
-                amount,
-                percentage:
-                  totalSpending > 0
-                    ? Math.round((amount / totalSpending) * 100)
-                    : 0,
-                color: getColorForIndex(index),
-              };
-            })
-            .sort((a, b) => b.amount - a.amount);
-
-          console.log(
-            `[Dashboard] Generated ${pieData.length} pie chart items from aggregations`
-          );
-
-          // Update state with new data
-          setPieData(pieData);
-          setCategorySummaries(summaries);
-        })
-        .catch((error) => {
-          console.error("[Dashboard] Error fetching categories:", error);
+      // First try to get categories from preloaded data
+      const preloadedCategories = await PreloadService.getPreloadedCategories();
+      
+      // If no preloaded categories, fetch them directly - this is important for fallback
+      if (!preloadedCategories || preloadedCategories.length === 0) {
+        console.warn("[Dashboard] No preloaded categories available, fetching directly...");
+        
+        try {
+          const fetchedCategories = await CategoryService.getUserCategories(auth.currentUser?.uid || "");
+          console.log(`[Dashboard] Direct fetch returned ${fetchedCategories.length} categories`);
+          // Process category data with freshly fetched categories
+          processCategoryDataWithCategories(fetchedCategories, categoryTotals, categoryTransactionCounts);
+        } catch (error) {
+          console.error("[Dashboard] Error fetching categories directly:", error);
           setPieData([]);
           setCategorySummaries([]);
-        });
+        }
+      } else {
+        // Continue with preloaded categories
+        processCategoryDataWithCategories(preloadedCategories, categoryTotals, categoryTransactionCounts);
+      }
     } catch (error) {
       console.error("[Dashboard] Error processing category data:", error);
+      setPieData([]);
+      setCategorySummaries([]);
+    }
+  };
+  
+  // Helper function to process category data with available categories
+  const processCategoryDataWithCategories = (
+    categories: any[],
+    categoryTotals: Record<string, number>,
+    categoryTransactionCounts: Record<string, number>
+  ): void => {
+    try {
+      // Build a map for quick lookups by ID
+      const categoryMap = new Map(categories.map((cat) => [cat.id, cat]));
+      
+      // Also create a map by name for fallback lookups
+      const categoryByNameMap = new Map(categories.map((cat) => [cat.name.toLowerCase(), cat]));
+      
+      console.log("[Dashboard] Category map prepared:", {
+        totalCategories: categories.length,
+        mapSize: categoryMap.size,
+        byNameMapSize: categoryByNameMap.size,
+        sampleCategories: categories.slice(0, 3).map(c => ({id: c.id, name: c.name}))
+      });
+      
+      // Log category IDs for debugging
+      console.log("[Dashboard] Category ID matching:", {
+        categoryIdsInTotals: Object.keys(categoryTotals).slice(0, 5),
+        categoryIdsInMap: [...categoryMap.keys()].slice(0, 5)
+      });
+
+      // Generate pie chart data
+      const pieData = Object.entries(categoryTotals)
+        .filter(([_, amount]) => amount > 0)
+        .map(([categoryId, amount], index) => {
+          // Try to find the category by ID first
+          let category = categoryMap.get(categoryId);
+          
+          // If not found by ID, try to find by name (in case categoryId is actually a name)
+          if (!category && typeof categoryId === 'string') {
+            category = categoryByNameMap.get(categoryId.toLowerCase());
+          }
+          
+          // For debugging
+          if (!category) {
+            console.warn(`[Dashboard] Could not find category for ID: ${categoryId}`);
+          }
+          
+          return {
+            name: category?.name || "Unknown",
+            amount,
+            color: getColorForIndex(index),
+            legendFontColor: "#FFFFFF",
+            legendFontSize: 12,
+          };
+        })
+        .sort((a, b) => b.amount - a.amount);
+
+      // Calculate total spending for percentages
+      const totalSpending = pieData.reduce((sum, item) => sum + item.amount, 0);
+
+      // Generate category summaries
+      const summaries = Object.entries(categoryTotals)
+        .filter(([_, amount]) => amount > 0)
+        .map(([categoryId, amount], index) => {
+          // Try to find the category by ID first
+          let category = categoryMap.get(categoryId);
+          
+          // If not found by ID, try to find by name (in case categoryId is actually a name)
+          if (!category && typeof categoryId === 'string') {
+            category = categoryByNameMap.get(categoryId.toLowerCase());
+          }
+          
+          return {
+            id: categoryId,
+            name: category?.name || "Unknown",
+            logo: category?.icon || "question-mark",
+            transactionCount: categoryTransactionCounts[categoryId] || 0,
+            amount,
+            percentage: totalSpending > 0 ? Math.round((amount / totalSpending) * 100) : 0,
+            color: getColorForIndex(index),
+          };
+        })
+        .sort((a, b) => b.amount - a.amount);
+
+      console.log(`[Dashboard] Generated ${pieData.length} pie chart items, with ${summaries.filter(s => s.name === "Unknown").length} unknown categories`);
+
+      // Update state with new data
+      setPieData(pieData);
+      setCategorySummaries(summaries);
+    } catch (error) {
+      console.error("[Dashboard] Error in processCategoryDataWithCategories:", error);
       setPieData([]);
       setCategorySummaries([]);
     }
@@ -1671,24 +1869,61 @@ const Dashboard = () => {
     }
   };
 
-  const onRefresh = () => {
+  const onRefresh = async () => {
     setIsRefreshing(true);
+    console.log("[Dashboard] Starting refresh...");
 
-    // Invalidate cache on manual refresh
-    invalidateTransactionCache(timeFrame);
+    try {
+      const userId = auth.currentUser?.uid;
+      if (!userId) {
+        console.error("[Dashboard] No user ID found during refresh");
+        setIsRefreshing(false);
+        return;
+      }
 
-    // Also clear preloaded data
-    PreloadService.clearAllPreloadedData();
+      // Get the current date range
+      const { currentStart, currentEnd } = getDateRanges(timeFrame);
 
-    // Start a fresh preload in the background for next time
-    const userId = auth.currentUser?.uid;
-    if (userId) {
+      // First check if there are any new transactions since our last fetch
+      const latestTransaction = await TransactionService.getLatestTransaction(userId);
+      const lastFetchedTransaction = PreloadService.getLastFetchedTransaction(timeFrame);
+
+      // If we have a last fetched transaction and it matches the latest transaction,
+      // and the date range hasn't changed, we can skip the refresh
+      if (lastFetchedTransaction && 
+          latestTransaction && 
+          lastFetchedTransaction.id === latestTransaction.id &&
+          lastFetchedTransaction.date.toDate().getTime() === latestTransaction.date.toDate().getTime()) {
+        console.log("[Dashboard] No new transactions found, keeping existing data");
+        setIsRefreshing(false);
+        return;
+      }
+
+      console.log("[Dashboard] New transactions found, refreshing data...");
+
+      // Only invalidate cache if we actually have new data
+      invalidateTransactionCache(timeFrame);
+      
+      // Clear preloaded data for this timeframe, but keep categories
+      PreloadService.clearPreloadedData(timeFrame);
+
+      // Start a fresh preload in the background for next time
       PreloadService.preloadDashboardData(timeFrame, true).catch((error) => {
-        console.error("Error preloading data during refresh:", error);
+        console.error("[Dashboard] Error preloading data during refresh:", error);
       });
-    }
 
-    fetchDashboardData();
+      // Fetch fresh data
+      await fetchDashboardData(true);
+    } catch (error) {
+      console.error("[Dashboard] Error during refresh:", error);
+      Toast.show({
+        type: "error",
+        text1: "Error",
+        text2: "Failed to refresh data",
+      });
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   const handleChartPress = (chartType: string, data: any) => {
@@ -1811,7 +2046,7 @@ const Dashboard = () => {
         }`}
       >
         <View className="w-full">
-          {isCategoryLoading ? (
+          {isCategoryLoading || !isCategoriesPreloaded ? (
             <View className="py-8 items-center">
               <ActivityIndicator
                 size="large"
@@ -1822,7 +2057,7 @@ const Dashboard = () => {
                   isDarkMode ? "text-gray-400" : "text-gray-500"
                 }`}
               >
-                Updating category data...
+                {isCategoryLoading ? "Updating category data..." : "Loading categories..."}
               </Text>
             </View>
           ) : (
@@ -2033,8 +2268,17 @@ const Dashboard = () => {
 
       const { currentStart, currentEnd } = getDateRanges(timeFrame);
 
+      // Log the parameters being used for the query
+      console.log('Loading category transactions with params:', {
+        userId,
+        categoryId,
+        categoryName,
+        timeFrame,
+        startDate: currentStart.toISOString(),
+        endDate: currentEnd.toISOString()
+      });
+
       // Directly fetch transactions filtered by both timeframe and category
-      console.log(`Fetching transactions for category ${categoryName} in ${timeFrame} timeframe`);
       const transactions = await TransactionService.getTransactionsByCategoryAndDateRange(
         userId,
         categoryId,
@@ -2122,6 +2366,7 @@ const Dashboard = () => {
   };
 
   if (isLoading) {
+    const Widget = <SpentThisMonthWidget timeFrame={timeFrame} />;
     return (
       <Animated.View
         className={`flex-1 ${isDarkMode ? "bg-[#0A0F1F]" : "bg-white"}`}
@@ -2139,7 +2384,7 @@ const Dashboard = () => {
           {/* Spent This Month Widget - centered */}
           <Pressable>
             <View className="w-full items-center mb-4">
-              <SpentThisMonthWidget timeFrame={timeFrame} />
+              {Widget}
             </View>
           </Pressable>
 
@@ -2180,6 +2425,8 @@ const Dashboard = () => {
     );
   }
 
+  const MainWidget = <SpentThisMonthWidget timeFrame={timeFrame} />;
+
   return (
     <ScrollView
       className={isDarkMode ? "bg-[#0A0F1F]" : "bg-white"}
@@ -2199,7 +2446,7 @@ const Dashboard = () => {
     >
       {/* Spent This Month Widget - centered */}
       <View className="w-full items-center mb-4">
-        <SpentThisMonthWidget timeFrame={timeFrame} />
+        {MainWidget}
       </View>
 
       {/* Time Frame Selector - centered */}

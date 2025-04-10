@@ -4,6 +4,7 @@ import { DailyAggregationService } from './dailyAggregationService';
 import { CategoryService } from './categoryService';
 import { Timestamp } from 'firebase/firestore';
 import { Transaction, DailyAggregation } from '../firebase/types';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Define a structure to store preloaded data
 interface PreloadedData {
@@ -49,7 +50,24 @@ class PreloadServiceClass {
   
   private isPreloading = false;
   private lastTimeframe: 'week' | 'month' | '6months' | 'year' = 'month'; // Default timeframe
-  
+  private lastFetchedTransactions: Record<string, Transaction> = {};
+
+  getLastFetchedTransaction(timeFrame: string): Transaction | null {
+    return this.lastFetchedTransactions[timeFrame] || null;
+  }
+
+  setLastFetchedTransaction(timeFrame: string, transaction: Transaction) {
+    this.lastFetchedTransactions[timeFrame] = transaction;
+  }
+
+  clearPreloadedData(timeFrame: string) {
+    // Clear only the data for the specific timeframe
+    // Don't clear categories as they are timeframe-independent
+    delete this.preloadedData.transactions[timeFrame];
+    delete this.preloadedData.aggregations[timeFrame];
+    delete this.lastFetchedTransactions[timeFrame];
+  }
+
   // Utility function to get date ranges based on timeFrame
   private getDateRanges(timeFrame: "week" | "month" | "6months" | "year") {
     const now = new Date();
@@ -266,17 +284,28 @@ class PreloadServiceClass {
       this.preloadedData.categories.data.length > 0 &&
       now - this.preloadedData.categories.timestamp < CACHE_EXPIRY.CATEGORIES
     ) {
-      console.log('Using cached categories');
+      console.log('[PreloadService] Using cached categories');
       return;
     }
     
     // Fetch categories
-    console.log('Preloading categories...');
+    console.log('[PreloadService] Preloading categories...');
     try {
       const [categories, mainCategories] = await Promise.all([
         CategoryService.getUserCategories(userId),
         CategoryService.getUserMainCategories(userId)
       ]);
+      
+      console.log('[PreloadService] Fetched categories and main categories:', {
+        categoriesCount: categories.length,
+        mainCategoriesCount: mainCategories.length,
+        categoryIds: categories.map(c => c.id).slice(0, 5), // Log first 5 category IDs
+        mainCategoryIds: mainCategories.map(c => c.id).slice(0, 5) // Log first 5 main category IDs
+      });
+      
+      if (!categories.length || !mainCategories.length) {
+        console.error('[PreloadService] Warning: Empty categories or main categories fetched');
+      }
       
       // Store in cache - keep the original object structure to ensure types match when retrieved
       this.preloadedData.categories = {
@@ -289,9 +318,20 @@ class PreloadServiceClass {
         timestamp: now
       };
       
-      console.log(`Preloaded ${categories.length} categories and ${mainCategories.length} main categories`);
+      // Also store in AsyncStorage for persistence across page refreshes
+      try {
+        await AsyncStorage.setItem('fintrack_categories', JSON.stringify(categories));
+        await AsyncStorage.setItem('fintrack_categories_timestamp', now.toString());
+        await AsyncStorage.setItem('fintrack_main_categories', JSON.stringify(mainCategories));
+        await AsyncStorage.setItem('fintrack_main_categories_timestamp', now.toString());
+        console.log('[PreloadService] Saved categories to AsyncStorage');
+      } catch (e) {
+        console.error('[PreloadService] Could not save categories to AsyncStorage:', e);
+      }
+      
+      console.log(`[PreloadService] Preloaded ${categories.length} categories and ${mainCategories.length} main categories`);
     } catch (error) {
-      console.error('Error preloading categories:', error);
+      console.error('[PreloadService] Error preloading categories:', error);
     }
   }
   
@@ -341,32 +381,104 @@ class PreloadServiceClass {
   /**
    * Get preloaded categories
    */
-  getPreloadedCategories(): any[] | null {
+  async getPreloadedCategories(): Promise<any[] | null> {
     const now = Date.now();
+    
+    // Log the category cache details for debugging
+    console.log('[PreloadService] Category cache check:', {
+      cacheSize: this.preloadedData.categories.data.length,
+      cacheAgeMs: now - this.preloadedData.categories.timestamp,
+      cacheExpiryMs: CACHE_EXPIRY.CATEGORIES,
+      isExpired: now - this.preloadedData.categories.timestamp >= CACHE_EXPIRY.CATEGORIES
+    });
     
     if (
       this.preloadedData.categories.data.length > 0 &&
       now - this.preloadedData.categories.timestamp < CACHE_EXPIRY.CATEGORIES
     ) {
+      console.log('[PreloadService] Using cached categories:', this.preloadedData.categories.data.length);
       return this.preloadedData.categories.data;
     }
     
+    // If cache is empty or expired, try to restore from AsyncStorage
+    try {
+      const storedCategories = await AsyncStorage.getItem('fintrack_categories');
+      const storedTimestamp = await AsyncStorage.getItem('fintrack_categories_timestamp');
+      
+      if (storedCategories && storedTimestamp) {
+        const timestamp = parseInt(storedTimestamp, 10);
+        
+        // Check if stored data is still valid
+        if (now - timestamp < CACHE_EXPIRY.CATEGORIES * 2) { // Double the expiry for AsyncStorage
+          const parsedCategories = JSON.parse(storedCategories);
+          console.log('[PreloadService] Restoring categories from AsyncStorage:', parsedCategories.length);
+          
+          // Update memory cache
+          this.preloadedData.categories = {
+            data: parsedCategories,
+            timestamp
+          };
+          
+          return parsedCategories;
+        }
+      }
+    } catch (error) {
+      console.error('[PreloadService] Error restoring categories from AsyncStorage:', error);
+    }
+    
+    console.log('[PreloadService] No valid categories in cache');
     return null;
   }
   
   /**
    * Get preloaded main categories
    */
-  getPreloadedMainCategories(): any[] | null {
+  async getPreloadedMainCategories(): Promise<any[] | null> {
     const now = Date.now();
+    
+    // Log the main category cache details for debugging
+    console.log('[PreloadService] Main category cache check:', {
+      cacheSize: this.preloadedData.mainCategories.data.length,
+      cacheAgeMs: now - this.preloadedData.mainCategories.timestamp,
+      cacheExpiryMs: CACHE_EXPIRY.CATEGORIES,
+      isExpired: now - this.preloadedData.mainCategories.timestamp >= CACHE_EXPIRY.CATEGORIES
+    });
     
     if (
       this.preloadedData.mainCategories.data.length > 0 &&
       now - this.preloadedData.mainCategories.timestamp < CACHE_EXPIRY.CATEGORIES
     ) {
+      console.log('[PreloadService] Using cached main categories:', this.preloadedData.mainCategories.data.length);
       return this.preloadedData.mainCategories.data;
     }
     
+    // If cache is empty or expired, try to restore from AsyncStorage
+    try {
+      const storedMainCategories = await AsyncStorage.getItem('fintrack_main_categories');
+      const storedTimestamp = await AsyncStorage.getItem('fintrack_main_categories_timestamp');
+      
+      if (storedMainCategories && storedTimestamp) {
+        const timestamp = parseInt(storedTimestamp, 10);
+        
+        // Check if stored data is still valid
+        if (now - timestamp < CACHE_EXPIRY.CATEGORIES * 2) { // Double the expiry for AsyncStorage
+          const parsedMainCategories = JSON.parse(storedMainCategories);
+          console.log('[PreloadService] Restoring main categories from AsyncStorage:', parsedMainCategories.length);
+          
+          // Update memory cache
+          this.preloadedData.mainCategories = {
+            data: parsedMainCategories,
+            timestamp
+          };
+          
+          return parsedMainCategories;
+        }
+      }
+    } catch (error) {
+      console.error('[PreloadService] Error restoring main categories from AsyncStorage:', error);
+    }
+    
+    console.log('[PreloadService] No valid main categories in cache');
     return null;
   }
   
