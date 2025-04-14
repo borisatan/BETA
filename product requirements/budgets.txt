@@ -1,0 +1,185 @@
+1. Budget Creation Process
+Users should be able to:
+
+Choose a budget type (e.g., monthly, weekly, custom duration).
+Set a total budget amount.
+Define categories (optional). Unlike the default 50/30/20 split, users can create custom categories (e.g., "Food," "Entertainment," "Transport").
+Set a start and end date.
+Firebase Structure Example: 
+Each budget would have:
+
+budgetId (string, unique identifier)
+userId (string)
+name (string, e.g., "March Budget" or "Vacation Fund")
+amount (number, total budget amount)
+categories (array of objects, optional)
+Example: [ { name: "Food", allocated: 500 }, { name: "Travel", allocated: 300 } ]
+startDate (timestamp)
+endDate (timestamp)
+createdAt (timestamp)
+updatedAt (timestamp)
+2. Budget Management
+Modify Budgets: Users can edit or delete any budget at any time.
+Track Spending Per Budget: Transactions should be assigned to a specific budget when created, so user should choose it just like the account they choose
+Notifications: Alerts when spending approaches or exceeds a budget.
+Visualization: Each budget should have a separate spending graph.
+3. Integration with Transactions
+When adding a new transaction, users should be able to select which budget it belongs to.
+The app should track remaining budget balance for each active budget.
+4. Dashboard Display
+Users see a list of all active budgets with their current spending status.
+Selecting a budget opens a detailed breakdown, including:
+A line graph for cumulative spending.
+
+
+
+1. Recurring Budget Setup
+When creating a budget, users should have the option to enable recurrence with:
+
+Frequency Options:
+Weekly (e.g., renew every 7 days)
+Monthly (e.g., renew on the 1st of each month)
+Custom Intervals (e.g., every 3 months)
+End Condition:
+Never Ends (keeps renewing)
+Ends After X Cycles
+Ends on a Specific Date
+2. Automatic Renewal Mechanism
+When a budget period ends, the app should automatically create a new budget entry with the same settings.
+Users should receive a notification before renewal, allowing them to adjust the budget if needed.
+3. Firebase Structure for Recurring Budgets
+Each budget would have additional fields:
+
+isRecurring (boolean) – whether the budget auto-renews
+recurrenceType (string) – "weekly," "monthly," "custom"
+recurrenceInterval (number, if custom) – e.g., 3 for every 3 months
+endDate (timestamp, optional) – when the recurrence stops
+nextRenewalDate (timestamp) – date when the budget will renew
+4. Dashboard Integration
+Recurring budgets appear as active budgets with an indication of their renewal cycle.
+If a budget is set to expire, a reminder notification appears.
+Users should have an option to pause or cancel recurrence at any time.
+
+There should be a couple of different types of budgets
+    1. Budget Category Allocation
+    When creating a budget, users will have the option to allocate their total budget to existing categories (such as Needs, Wants, and Savings).
+
+    Main Categories: By default, the app will suggest these categories:
+    50% Needs: (e.g., rent, groceries, utilities)
+    30% Wants: (e.g., entertainment, dining out, subscriptions)
+    20% Savings: (e.g., emergency fund, retirement, investments)
+    Users can modify these percentages or amounts as needed.
+    2. "Help Me Decide" Option
+    If the user is unsure how to split their budget, the app will provide a “Help me decide” option that automatically sets the default 50/30/20 split for them. This can be triggered during the budget creation process.
+
+    3. Simple Budget Without Categories
+    In cases where users prefer not to use categories (e.g., for a vacation budget where all expenses fall under one category), we’ll offer the option to skip categories altogether.
+
+    For example, a vacation budget could track all spending under one "Vacation" category, simplifying the process without the need for categorization.
+    Users can toggle between a category-based budget and a simple budget with just a total amount.
+    4. Budget Creation Flow
+    Option 1: Category-Based Budget
+    Choose categories (e.g., Needs, Wants, Savings).
+    Set the amounts or percentages for each category.
+    Option 2: Simple Budget
+    Select the total budget amount and leave it without categories.
+    This is ideal for event-based budgets, like a vacation or a single project.
+
+5. User Experience
+During budget creation, users will be prompted to either select categories or opt for a simple budget.
+If they choose categories, they will get the default split and can modify it.
+If they choose a simple budget, they won’t see categories in their budget breakdown.
+
+
+
+Remove the  date selector for now. Whenever im allocating money to a category i want to have THE MAIN CATEGORIES THERE, meaning "Needs", wants savings.
+
+Goal:
+To create a circular pie chart that represents budget categories (such as Needs, Wants, Savings, etc.) and allows users to interactively adjust the allocation for each category. Each slice of the pie chart corresponds to a category, and the size of the slice should change dynamically based on user input.
+
+Core Concepts:
+Dynamic Categories:
+
+Variable Categories: The user can have more than three categories (e.g., Needs, Wants, Savings, Debt, Entertainment, etc.), and these categories are already stored in the database. The pie chart should retrieve these categories and their respective budget allocations dynamically and represent them as slices in the chart.
+
+Dynamic Allocation: The app will adjust the allocation (amount or percentage) for each category, and as the user interacts with the chart, the allocation should be updated in real-time.
+
+Circular Pie Chart:
+
+The chart will be circular with segments (slices) for each budget category. Each slice represents the proportion of the total budget allocated to that category.
+
+Each Segment:
+
+A segment corresponds to one category.
+
+The size of each segment is determined by the percentage of the total budget allocated to that category.
+
+Draggable Segments:
+
+Interaction: Users will be able to click and drag the edge of each slice to adjust the allocation for that category. As they drag the edge of a segment, the corresponding percentage or dollar amount will increase or decrease based on how much they move the slice.
+
+Real-Time Updates: As the user interacts with a segment, the app will immediately update the display to show the new allocation. If the allocation for one segment is increased, the other segments should adjust accordingly to maintain the total budget at 100%.
+
+Visual Feedback:
+
+Percentage/Dollar Amount Display: Each segment should display either the percentage or the dollar amount allocated to that category, so users can easily see how their budget is distributed.
+
+Total Budget: A "Total Budget" label should appear in the center of the pie chart. This label should update dynamically as users adjust the slices, reflecting the current total budget based on the updated allocations.
+
+Automatic Adjustments: When the user drags the edge of a slice, the other slices should shrink or grow in real-time to maintain the total budget allocation of 100%. If one segment is expanded (i.e., the user increases the budget for one category), the app should automatically shrink the other segments to keep the total sum at 100%.
+
+Error Handling:
+
+Overflow Prevention: Ensure that no individual slice can exceed the total 100% budget. For example, if a user drags one slice too far, the app should display a visual warning or prevent further expansion.
+
+Responsive Layout: The chart should be responsive, adjusting dynamically if the number of categories changes (e.g., if the user adds or removes categories).
+
+Implementation Steps:
+Dynamic Category Retrieval:
+
+The app should retrieve the categories and their respective budget allocations from Firebase. This data will be used to generate the slices of the pie chart.
+
+Firebase Structure:
+
+Each user’s budget data will be stored in a way that each category has an associated allocation (in percentage or dollar value).
+
+The app will query this data, dynamically creating slices based on the number of categories the user has.
+
+Rendering the Pie Chart:
+
+Rendering Logic: Based on the number of categories retrieved, the pie chart will dynamically create that many slices.
+
+Pie Chart Library: Use a library like react-native-svg or react-native-chart-kit to generate a circular pie chart. Each slice will represent a category.
+
+Each slice's size will be proportional to the percentage or dollar amount allocated to that category.
+
+As the user interacts with a slice, the app will update the allocation for that category and adjust the slices accordingly.
+
+Draggable Interactions:
+
+Slider Mechanism: Implement a draggable slider for each slice that will allow the user to change the allocation for that category.
+
+When the user drags the edge of a slice, update the corresponding percentage or dollar value in real-time.
+
+Update the allocations of all other categories so that the total budget always sums to 100%.
+
+Ensure that as a slice is increased or decreased, the pie chart updates smoothly, providing immediate feedback to the user.
+
+Total Budget:
+
+The total budget, displayed in the center of the pie chart, should dynamically update as the user interacts with the slices.
+
+Example: If the total budget is $1000 and the user adjusts the categories (e.g., increasing Needs from $300 to $400), the Total Budget label should immediately reflect the new values (e.g., "$1000 total budget").
+
+Handling User Input:
+
+Prevent Over-Allocation: If a user adjusts one category, ensure that the other categories are automatically resized to maintain the 100% allocation.
+
+Smooth Transitions: Use smooth animations to reflect changes in the pie chart as the user interacts with the segments.
+
+Edge Cases to Consider:
+Non-Uniform Category Distribution: If a user starts with unequal distribution (e.g., Needs = 50%, Wants = 30%, Savings = 20%), the chart should display these proportions correctly. When the user adjusts one category, the other categories should automatically adjust.
+
+Adding or Removing Categories: If the user adds or removes a category, the pie chart should adjust to reflect the new number of categories, recalculating the allocation for each one.
+
+Negative Allocations: Prevent the user from assigning a negative value to any category.

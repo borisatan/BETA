@@ -1,0 +1,65 @@
+Add Transaction Page Layout:
+
+Top Header:
+
+At the top of the page, centered, there is a label "Categories".
+To the right of this label, there is an "Edit" button which users can click to edit the categories.
+Scrollable Horizontal Account Line:
+
+Below the "Categories" section, there is a horizontal scrollable line.
+This scrollable line displays all the accounts the user has linked in the app.
+Each account in the scrollable section should be displayed as a clickable item.
+Category Selection Boxes:
+
+Below the scrollable account line, you have a grid of rounded-edge square boxes for category selection.
+Initially, there should be 3 rows displayed, with the following categories at the top row:
+"Needs"
+"Wants"
+"Savings"
+These three should be the default categories and are shown as clickable boxes.
+Each row below will display 5 boxes each, corresponding to specific categories related to the selected category ("Needs", "Wants", or "Savings").
+Example: If "Needs" is clicked, the next row will display 5 different categories under "Needs" (e.g., Groceries, Rent, Utilities, etc.).
+The same logic applies for "Wants" and "Savings," where the second row will display categories for "Wants" and the third row for "Savings".
+The "Needs" category is selected by default when the page is loaded.
+Amount Input (Pop-up on Selection):
+
+When a user clicks on one of the category boxes in any row (under "Needs", "Wants", or "Savings"), a pop-up should appear from the bottom of the screen.
+The pop-up should contain a number input field where the user can type in the amount of money for that category.
+This input should allow for the user to enter decimal values for precise transactions (e.g., 50.25).
+Additionally, the pop-up should include a Save button to confirm the entered amount or a Cancel button to close the pop-up without saving the amount.
+Additional Details:
+
+The pop-up should be easy to close by tapping outside or using the cancel button.
+The design should be clean, with rounded corners for the category boxes, and a smooth scrolling effect for the account section.
+The layout should adapt well to different screen sizes (responsive design), ensuring the categories and account scrollable line display correctly.
+
+
+
+
+Adding a Category:
+
+Category Selection: When adding a new category, the user should be able to choose one of the main categories (e.g., "Needs", "Wants", or "Savings") under which the new category will fall.
+
+A drop-down menu or a modal should be displayed, showing the three main categories. The user selects one, and the new category will be categorized accordingly.
+Category Name and Icon Selection: After selecting the main category, the user is prompted to enter a name for the new category (e.g., "Groceries", "Transportation", etc.).
+
+Below the name field, there should be an option to select an icon for the category. A grid of 200 pre-downloaded icons will be displayed, and the user can click on one to assign it to the new category.
+Icon Selection Alternative: If none of the icons fit, the user can choose an emoji from a selection of common emojis, providing a flexible way to represent the category visually.
+Backend Logic for Adding Category: After the user enters the category name and selects either an icon or emoji, pressing the "Add" button will save the new category. The app should automatically handle the backend logic to:
+
+Assign the category to the chosen main category (e.g., "Needs", "Wants", or "Savings").
+Store the category’s name and associated icon/emoji in the database.
+Ensure the frontend is updated to reflect the new category in the appropriate section.
+Editing a Category:
+
+Edit Button: When the user clicks on the "Edit" icon next to a category, a pop-up should appear allowing them to modify:
+The category name.
+The main category it falls under (if the user wants to re-categorize it).
+The icon (with the same grid of 200 icons or emoji selection).
+Sub-Category List: Under the "Main Categories" section in the settings or menu, add a sub-menu titled "Categories". This will display all sub-categories along with their corresponding main category labels (e.g., "Needs: Groceries", "Wants: Entertainment", etc.). The user can edit each category from here.
+Deleting a Category:
+
+Category Deletion: To delete a category, the user should have an option to click a trash bin icon next to the category in the "Categories" menu or settings page.
+Once clicked, a confirmation pop-up should appear, asking if the user is sure they want to delete the category.
+If confirmed, the category will be removed from both the frontend and backend.
+The app should ensure that any related data tied to the category is also deleted or re-assigned appropriately to maintain consistency across the app.

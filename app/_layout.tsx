@@ -3,8 +3,9 @@ import Toast from 'react-native-toast-message';
 import "./global.css"
 import { useFonts } from "expo-font";
 import { useEffect } from "react";
-import { ThemeProvider } from './(root)/context/ThemeContext';
-import { AuthProvider } from './(root)/context/AuthContext';
+import { AuthProvider } from "./(root)/context/AuthContext";
+import { ThemeProvider } from "./(root)/context/ThemeContext";
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 export default function RootLayout() {
   const fontsLoaded = useFonts({
@@ -27,13 +28,19 @@ export default function RootLayout() {
   }
 
   return (
-    <AuthProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider>
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="(root)" />
-        </Stack>
-        <Toast />
+        <AuthProvider>
+          <Stack
+            screenOptions={{
+              headerShown: false,
+            }}
+          >
+            <Stack.Screen name="(root)" />
+          </Stack>
+          <Toast />
+        </AuthProvider>
       </ThemeProvider>
-    </AuthProvider>
+    </GestureHandlerRootView>
   )
 }

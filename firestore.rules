@@ -1,48 +1,198 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Helper functions
+    // Allow users to read and write their own data
+    match /accounts/{accountId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+    }
+    
+    match /transactions/{transactionId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+    }
+    
+    match /categories/{categoryId} {
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow update: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
+    }
+    
+    match /mainCategories/{mainCategoryId} {
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow update: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
+    }
+    
+    match /subcategories/{subcategoryId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+    }
+    
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    match /budgets/{budgetId} {
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow update: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
+      // Allow list operation for querying budgets
+      allow list: if request.auth != null && resource.data.userId == request.auth.uid;
+    }
+
+    // Helper function to check if user is authenticated
     function isAuthenticated() {
       return request.auth != null;
     }
-    
+
+    // Helper function to check if user owns the document
     function isOwner(userId) {
-      return request.auth.uid == userId;
+      return isAuthenticated() && request.auth.uid == userId;
     }
 
-    // Account rules
+    function isValidTimestamp() {
+      return request.resource.data.date is timestamp;
+    }
+    
+    function isValidAmount() {
+      return request.resource.data.totalIncome is number 
+        && request.resource.data.totalExpenses is number
+        && request.resource.data.netFlow is number
+        && request.resource.data.transactionCount is number;
+    }
+    
+    function isValidAggregation() {
+      return request.resource.data.userId is string
+        && isValidTimestamp()
+        && isValidAmount()
+        && request.resource.data.netFlow == (request.resource.data.totalIncome - request.resource.data.totalExpenses);
+    }
+
+    // Daily Aggregations rules
+    match /dailyAggregations/{aggregationId} {
+      allow read: if isAuthenticated() && isOwner(resource.data.userId);
+      allow create: if isAuthenticated() 
+        && request.resource.data.userId == request.auth.uid
+        && (
+          'totalIncome' in request.resource.data && request.resource.data.totalIncome is number
+          && 'totalExpenses' in request.resource.data && request.resource.data.totalExpenses is number
+          && 'netFlow' in request.resource.data && request.resource.data.netFlow is number
+          && 'transactionCount' in request.resource.data && request.resource.data.transactionCount is number
+          && 'date' in request.resource.data && request.resource.data.date is timestamp
+          && 'createdAt' in request.resource.data && request.resource.data.createdAt is timestamp
+          && 'updatedAt' in request.resource.data && request.resource.data.updatedAt is timestamp
+          && request.resource.data.netFlow == (request.resource.data.totalIncome - request.resource.data.totalExpenses)
+          && request.resource.data.transactionCount >= 0
+        );
+      allow update: if isAuthenticated() 
+        && isOwner(resource.data.userId)
+        && request.resource.data.userId == resource.data.userId
+        && (
+          'totalIncome' in request.resource.data && request.resource.data.totalIncome is number
+          && 'totalExpenses' in request.resource.data && request.resource.data.totalExpenses is number
+          && 'netFlow' in request.resource.data && request.resource.data.netFlow is number
+          && 'transactionCount' in request.resource.data && request.resource.data.transactionCount is number
+          && 'date' in request.resource.data && request.resource.data.date is timestamp
+          && 'updatedAt' in request.resource.data && request.resource.data.updatedAt is timestamp
+          && request.resource.data.netFlow == (request.resource.data.totalIncome - request.resource.data.totalExpenses)
+          && request.resource.data.transactionCount >= 0
+        );
+      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
+      allow list: if isAuthenticated() && request.query.limit <= 1000;
+    }
+
+    // Helper function to validate transaction data
+    function isValidTransaction() {
+      return request.resource.data.userId == request.auth.uid
+        && request.resource.data.amount is number
+        && request.resource.data.date is timestamp
+        && request.resource.data.description is string
+        && request.resource.data.accountId is string
+        && request.resource.data.categoryId is string
+        && request.resource.data.transactionType in ['expense', 'income']
+        && (!('paymentMethod' in request.resource.data) || request.resource.data.paymentMethod is string || request.resource.data.paymentMethod == null)
+        && (!('notes' in request.resource.data) || request.resource.data.notes is string || request.resource.data.notes == null)
+        && (!('subcategoryId' in request.resource.data) || request.resource.data.subcategoryId is string || request.resource.data.subcategoryId == null);
+    }
+
+    // Users collection rules
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+    }
+
+    // Accounts collection rules
     match /accounts/{accountId} {
-      allow read: if isAuthenticated() && isOwner(resource.data.userId);
-      allow create: if isAuthenticated() && isOwner(request.resource.data.userId);
-      allow update, delete: if isAuthenticated() && isOwner(resource.data.userId);
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && (
+        isOwner(resource.data.userId) || 
+        // Allow batch operations that only update balance and timestamp
+        (
+          request.resource.data.userId == resource.data.userId &&
+          "balance" in request.resource.data &&
+          "updatedAt" in request.resource.data &&
+          request.resource.data.updatedAt is timestamp
+        )
+      );
+      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
     }
 
-    // Transaction rules
+    // Transactions collection rules
     match /transactions/{transactionId} {
-      allow read: if isAuthenticated() && isOwner(resource.data.userId);
-      allow create: if isAuthenticated() && isOwner(request.resource.data.userId);
-      allow update, delete: if isAuthenticated() && isOwner(resource.data.userId);
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidTransaction();
+      allow update: if isAuthenticated() && (
+        isOwner(resource.data.userId) ||
+        // Allow batch operations that only update specific fields
+        (
+          request.resource.data.userId == resource.data.userId &&
+          "updatedAt" in request.resource.data &&
+          request.resource.data.updatedAt is timestamp
+        )
+      );
+      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
     }
 
-    // Category rules
+    // Categories collection rules
     match /categories/{categoryId} {
-      allow read: if isAuthenticated() && isOwner(resource.data.userId);
-      allow create: if isAuthenticated() && isOwner(request.resource.data.userId);
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if isAuthenticated() && isOwner(resource.data.userId);
     }
 
-    // Subcategory rules
-    match /subcategories/{subcategoryId} {
-      allow read: if isAuthenticated() && isOwner(resource.data.userId);
-      allow create: if isAuthenticated() && isOwner(request.resource.data.userId);
+    // Main Categories collection rules
+    match /mainCategories/{mainCategoryId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if isAuthenticated() && isOwner(resource.data.userId);
     }
 
-    // Income rules
-    match /income/{incomeId} {
-      allow read: if isAuthenticated() && isOwner(resource.data.userId);
-      allow create: if isAuthenticated() && isOwner(request.resource.data.userId);
+    // Recurring Incomes collection rules
+    match /recurringIncomes/{incomeId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if isAuthenticated() && isOwner(resource.data.userId);
     }
+    
+    // Budgets collection rules
+    match /budgets/{budgetId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAuthenticated() && isOwner(resource.data.userId);
+      allow list: if isAuthenticated();
+    }
+    
+    // Daily Aggregations collection rules
+    match /dailyAggregations/{aggregationId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow list: if isAuthenticated();
+    }	
   }
 } 
