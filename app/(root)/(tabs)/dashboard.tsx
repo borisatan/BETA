@@ -604,7 +604,7 @@ const Dashboard = () => {
     pieData: PieChartData[];
   }> => {
     try {
-      console.log(`[Dashboard] Preparing category summary from ${transactions.length} transactions in ${viewMode} mode`);
+      console.log(`[Dashboard] Preparing category summary from ${transactions.length} transactions for ${viewMode} view`);
       
       // Fetch categories and main categories
       const [categories, mainCategories] = await Promise.all([
@@ -665,7 +665,7 @@ const Dashboard = () => {
       
       // Tracking for debugging
       let categorizedCount = 0;
-    let uncategorizedCount = 0;
+      let uncategorizedCount = 0;
 
       // Process transactions
       for (const transaction of transactions) {
@@ -710,11 +710,11 @@ const Dashboard = () => {
       console.log(`[Dashboard] Transaction categorization: ${categorizedCount} categorized, ${uncategorizedCount} uncategorized`);
 
       // Generate data based on view mode
-    if (viewMode === "subcategories") {
+      if (viewMode === "subcategories") {
         // Calculate total spending for percentages
         const totalSpending = Object.values(categoryTotals).reduce((sum, amount) => sum + amount, 0);
         
-        console.log(`[Dashboard] Category totals for subcategories:`, {
+        console.log(`[Dashboard] Category totals:`, {
           categories: Object.keys(categoryTotals).length,
           totalSpending
         });
@@ -725,13 +725,13 @@ const Dashboard = () => {
           .map(([categoryId, amount], index) => {
             const category = categoryMap.get(categoryId);
             return {
-          id: categoryId,
+              id: categoryId,
               name: category?.name || "Unknown",
               logo: category?.icon || "question-mark",
-          transactionCount: categoryTransactionCounts[categoryId] || 0,
-            amount,
+              transactionCount: categoryTransactionCounts[categoryId] || 0,
+              amount,
               percentage: totalSpending > 0 ? Math.round((amount / totalSpending) * 100) : 0,
-            color: getColorForIndex(index),
+              color: getColorForIndex(index),
             };
           })
           .sort((a, b) => b.amount - a.amount);
@@ -748,7 +748,7 @@ const Dashboard = () => {
         console.log(`[Dashboard] Generated ${summaries.length} category summaries with ${summaries.filter(s => s.name === "Unknown").length} unknown categories`);
 
         return { categorySummaries: summaries, pieData };
-        } else {
+      } else {
         // Calculate total spending for main categories
         const totalSpending = Object.values(mainCategoryTotals).reduce((sum, amount) => sum + amount, 0);
         
@@ -764,8 +764,8 @@ const Dashboard = () => {
             const mainCategory = mainCategoryMapById.get(mainCategoryId);
             return {
               id: mainCategoryId,
-              name: mainCategory?.name || "Unknown",
-              logo: mainCategory?.icon || "question-mark",
+              name: mainCategory?.name || "Unknown Main Category",
+              logo: mainCategory?.icon || "priority-high",
               transactionCount: mainCategoryTransactionCounts[mainCategoryId] || 0,
               amount,
               percentage: totalSpending > 0 ? Math.round((amount / totalSpending) * 100) : 0,
@@ -776,19 +776,19 @@ const Dashboard = () => {
 
         // Generate pie chart data
         const pieData = summaries.map(item => ({
-      name: item.name,
-      amount: item.amount,
-      color: item.color,
-      legendFontColor: "#FFFFFF",
-      legendFontSize: 12,
-    }));
+          name: item.name,
+          amount: item.amount,
+          color: item.color,
+          legendFontColor: "#FFFFFF",
+          legendFontSize: 12,
+        }));
+        
+        console.log(`[Dashboard] Generated ${summaries.length} main category summaries`);
 
-        console.log(`[Dashboard] Generated ${summaries.length} main category summaries with ${summaries.filter(s => s.name === "Unknown").length} unknown categories`);
-
-    return { categorySummaries: summaries, pieData };
+        return { categorySummaries: summaries, pieData };
       }
     } catch (error) {
-      console.error("[Dashboard] Error preparing category summary:", error);
+      console.error("[Dashboard] Error preparing category summary from transactions:", error);
       return { categorySummaries: [], pieData: [] };
     }
   };
@@ -1606,10 +1606,12 @@ const Dashboard = () => {
       
       console.log(`[Dashboard] Category matching: ${matchedById} matched by ID, ${matchedByName} matched by name`);
 
-      // Generate pie chart data
-      const pieData = Object.entries(categoryTotals)
+      // Generate pie chart data with deduplication
+      const pieDataMap = new Map(); // Use a Map to deduplicate by category name
+      
+      Object.entries(categoryTotals)
         .filter(([_, amount]) => amount > 0)
-        .map(([categoryId, amount], index) => {
+        .forEach(([categoryId, amount], index) => {
           // First try to find by ID
           let category = categoryMapById.get(categoryId);
           
@@ -1622,23 +1624,35 @@ const Dashboard = () => {
           const displayName = category?.name || categoryId;
           displayNameToCategoryId.set(displayName, category?.id || categoryId);
           
-          return {
-            name: displayName,
-            amount,
-            color: getColorForIndex(index),
-            legendFontColor: "#FFFFFF",
-            legendFontSize: 12,
-          };
-        })
+          // Only add to pieDataMap if we haven't seen this category name before
+          if (!pieDataMap.has(displayName)) {
+            pieDataMap.set(displayName, {
+              name: displayName,
+              amount,
+              color: getColorForIndex(index),
+              legendFontColor: "#FFFFFF",
+              legendFontSize: 12,
+            });
+          } else {
+            // If we've seen this category before, add the amounts
+            const existing = pieDataMap.get(displayName);
+            existing.amount += amount;
+          }
+        });
+
+      // Convert Map to array and sort by amount
+      const pieData = Array.from(pieDataMap.values())
         .sort((a, b) => b.amount - a.amount);
 
       // Calculate total spending for percentages
       const totalSpending = pieData.reduce((sum, item) => sum + item.amount, 0);
 
-      // Generate category summaries
-      const summaries = Object.entries(categoryTotals)
+      // Generate category summaries with deduplication
+      const summariesMap = new Map(); // Use a Map to deduplicate by category name
+      
+      Object.entries(categoryTotals)
         .filter(([_, amount]) => amount > 0)
-        .map(([categoryId, amount], index) => {
+        .forEach(([categoryId, amount], index) => {
           // First try to find by ID
           let category = categoryMapById.get(categoryId);
           
@@ -1652,16 +1666,28 @@ const Dashboard = () => {
           const actualCategoryId = category?.id || categoryId;
           displayNameToCategoryId.set(displayName, actualCategoryId);
           
-          return {
-            id: actualCategoryId, // Use the actual category ID
-            name: displayName,
-            logo: category?.icon || "question-mark",
-            transactionCount: categoryTransactionCounts[categoryId] || 0,
-            amount,
-            percentage: totalSpending > 0 ? Math.round((amount / totalSpending) * 100) : 0,
-            color: getColorForIndex(index),
-          };
-        })
+          // Only add to summariesMap if we haven't seen this category name before
+          if (!summariesMap.has(displayName)) {
+            summariesMap.set(displayName, {
+              id: actualCategoryId,
+              name: displayName,
+              logo: category?.icon || "question-mark",
+              transactionCount: categoryTransactionCounts[categoryId] || 0,
+              amount,
+              percentage: totalSpending > 0 ? Math.round((amount / totalSpending) * 100) : 0,
+              color: getColorForIndex(index),
+            });
+          } else {
+            // If we've seen this category before, combine the data
+            const existing = summariesMap.get(displayName);
+            existing.amount += amount;
+            existing.transactionCount += (categoryTransactionCounts[categoryId] || 0);
+            existing.percentage = totalSpending > 0 ? Math.round((existing.amount / totalSpending) * 100) : 0;
+          }
+        });
+
+      // Convert Map to array and sort by amount
+      const summaries = Array.from(summariesMap.values())
         .sort((a, b) => b.amount - a.amount);
 
       console.log(`[Dashboard] Generated ${pieData.length} pie chart items`);
@@ -1993,13 +2019,26 @@ const Dashboard = () => {
 
     console.log("CategorySummaryCard rendering with data:", {
       summariesLength: categorySummaries.length,
-      summaryData: categorySummaries,
+      summaryData: categorySummaries.slice(0, 3), // Just log first 3 for brevity
     });
+
+    // Ensure categories are deduplicated by ID
+    const uniqueCategories = React.useMemo(() => {
+      // Use a Map to deduplicate by ID
+      const categoryMap = new Map();
+      categorySummaries.forEach(category => {
+        // Only add if not already present
+        if (!categoryMap.has(category.id)) {
+          categoryMap.set(category.id, category);
+        }
+      });
+      return Array.from(categoryMap.values());
+    }, [categorySummaries]);
 
     // Limit to first 5 categories initially, then show all if requested
     const displayCategories = showAllCategories
-      ? categorySummaries
-      : categorySummaries.slice(0, 5);
+      ? uniqueCategories
+      : uniqueCategories.slice(0, 5);
 
     // Format currency with comma separators, no decimal places
     const formatCurrency = (amount: number) => {
@@ -2045,16 +2084,15 @@ const Dashboard = () => {
             </View>
           ) : (
             <>
-              {displayCategories.map((category) => (
+              {displayCategories.map((category, index) => (
                 <TouchableOpacity
-                  key={category.id}
+                  key={`category-${category.id}-${index}`}
                   onPress={() => handleCategoryClick(category)}
                   activeOpacity={0.7}
                 >
                   <View
                     className={`flex-row justify-between items-center py-3 ${
-                      category.id !==
-                      displayCategories[displayCategories.length - 1].id
+                      index < displayCategories.length - 1
                         ? `border-b ${
                             isDarkMode ? "border-gray-700" : "border-gray-200"
                           }`
@@ -2118,7 +2156,7 @@ const Dashboard = () => {
                 </TouchableOpacity>
               ))}
 
-              {categorySummaries.length > 5 && (
+              {uniqueCategories.length > 5 && (
                 <TouchableOpacity
                   onPress={() => setShowAllCategories(!showAllCategories)}
                   className={`py-3 items-center mt-2 ${
@@ -2132,12 +2170,12 @@ const Dashboard = () => {
                   >
                     {showAllCategories
                       ? "Show Less"
-                      : `View All (${categorySummaries.length})`}
+                      : `View All (${uniqueCategories.length})`}
                   </Text>
                 </TouchableOpacity>
               )}
 
-              {categorySummaries.length === 0 && (
+              {uniqueCategories.length === 0 && (
                 <View className="py-8 items-center">
                   <Text
                     className={`${

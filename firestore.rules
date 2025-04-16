@@ -186,15 +186,10 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() && isValidTransaction();
       allow update: if isAuthenticated() && (
-        isOwner(resource.data.userId) ||
-        // Allow batch operations that only update specific fields
-        (
-          request.resource.data.userId == resource.data.userId &&
-          "updatedAt" in request.resource.data &&
-          request.resource.data.updatedAt is timestamp
-        )
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == request.auth.uid
       );
-      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
     }
 
     // Recurring Incomes collection rules
