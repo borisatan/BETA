@@ -23,8 +23,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const preloadDashboardData = async (userId: string) => {
     console.log('Starting dashboard data preloading for user:', userId);
     try {
-      // Preload with the default timeframe (month)
-      await PreloadService.preloadDashboardData('month');
+      // Initialize preloading which includes recurring payments processing
+      await PreloadService.initializePreloading(userId);
     } catch (error) {
       console.error('Error preloading dashboard data:', error);
     }

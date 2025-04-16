@@ -47,4 +47,13 @@ export class UserService {
     if (!userId) return null;
     return this.getUser(userId);
   }
-} 
+  
+  static async getUserRole(userId: string): Promise<'user' | 'admin'> {
+    // In this simplified implementation, all users are considered regular users
+    // This can be extended in the future to check for admin roles in the user document
+    return 'user';
+  }
+}
+
+// Export the getUserRole function directly for easier imports
+export const getUserRole = UserService.getUserRole; 

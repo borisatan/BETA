@@ -267,7 +267,11 @@ const TransactionAdder = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              await CategoryService.deleteCategory(category.id);
+              const userId = auth.currentUser?.uid;
+              if (!userId) {
+                throw new Error('User not authenticated');
+              }
+              await CategoryService.deleteCategory(category.id, userId);
               Toast.show({
                 type: 'success',
                 text1: 'Success',
@@ -350,7 +354,8 @@ const TransactionAdder = () => {
           name: newCategoryName,
           mainCategory: newCategoryMainCategory,
           icon: iconToSave,
-          userId
+          userIds: [userId],
+          order: categories.length
         });
         Toast.show({
           type: 'success',
@@ -418,7 +423,11 @@ const TransactionAdder = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              await CategoryService.deleteMainCategory(mainCategory.id);
+              const userId = auth.currentUser?.uid;
+              if (!userId) {
+                throw new Error('User not authenticated');
+              }
+              await CategoryService.deleteMainCategory(mainCategory.id, userId);
               Toast.show({
                 type: 'success',
                 text1: 'Success',
@@ -461,10 +470,14 @@ const TransactionAdder = () => {
         return;
       }
 
+      // If we have a selected emoji, use it as the icon
+      // Otherwise, use the selected material icon
+      const iconToSave = emojiInput || newMainCategoryIcon;
+
       if (editingMainCategory) {
         await CategoryService.updateMainCategory(editingMainCategory.id, {
           name: newMainCategoryName,
-          icon: newMainCategoryIcon
+          icon: iconToSave
         });
         Toast.show({
           type: 'success',
@@ -474,8 +487,8 @@ const TransactionAdder = () => {
       } else {
         await CategoryService.createMainCategory({
           name: newMainCategoryName,
-          icon: newMainCategoryIcon,
-          userId,
+          icon: iconToSave,
+          userIds: [userId],
           order: mainCategories.length
         });
         Toast.show({

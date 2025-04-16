@@ -5,7 +5,7 @@ import { auth } from '../firebase/firebaseConfig';
 
 export class AccountService {
   private static collection = 'accounts';
-  private static recurringIncomeCollection = 'recurringIncomes';
+  private static MAX_RECURRING_INCOMES = 10;
 
   static async createAccount(account: Omit<Account, 'id'>): Promise<string> {
     try {
@@ -69,47 +69,37 @@ export class AccountService {
       }
 
       const batch = writeBatch(db);
-
-      // Create recurring income document
-      const recurringIncomeRef = doc(collection(db, this.recurringIncomeCollection));
-      const now = Timestamp.now();
-      const recurringIncomeData = {
-        ...recurringIncome,
-        userId,
-        accountId,
-        createdAt: now,
-        updatedAt: now
-      };
-      batch.set(recurringIncomeRef, recurringIncomeData);
-
-      // Create initial transaction for the recurring income
-      const transactionRef = doc(collection(db, 'transactions'));
-      const transactionData = {
-        userId,
-        amount: recurringIncome.amount,
-        description: `${recurringIncome.description} (Recurring)`,
-        accountId,
-        categoryId: '', // You might want to create a special income category
-        date: now,
-        transactionType: 'income',
-        createdAt: now,
-        updatedAt: now
-      };
-      batch.set(transactionRef, transactionData);
-
-      // Update account balance and add recurring income reference
       const accountRef = doc(db, this.collection, accountId);
+      const accountDoc = await getDoc(accountRef);
+      const account = accountDoc.data() as Account;
+
+      // Check if we've reached the limit
+      if (account.recurringIncomes && account.recurringIncomes.length >= this.MAX_RECURRING_INCOMES) {
+        throw new Error(`Maximum of ${this.MAX_RECURRING_INCOMES} recurring incomes per account reached`);
+      }
+
+      // Generate a new ID for the recurring income
+      const recurringIncomeId = doc(collection(db, '_')).id;
+      const now = Timestamp.now();
+
+      // Create the recurring income object
+      const newRecurringIncome: RecurringIncome = {
+        ...recurringIncome,
+        id: recurringIncomeId,
+        userId,
+        accountId,
+        createdAt: now,
+        updatedAt: now
+      };
+
+      // Update the account with the new recurring income
       batch.update(accountRef, {
-        balance: increment(recurringIncome.amount),
-        recurringIncomes: arrayUnion({
-          id: recurringIncomeRef.id,
-          ...recurringIncomeData
-        }),
+        recurringIncomes: arrayUnion(newRecurringIncome),
         updatedAt: now
       });
 
       await batch.commit();
-      return recurringIncomeRef.id;
+      return recurringIncomeId;
     } catch (error) {
       console.error('Error adding recurring income:', error);
       throw error;
@@ -123,29 +113,31 @@ export class AccountService {
         throw new Error('User not authenticated');
       }
 
-      // Update recurring income document
-      const recurringIncomeRef = doc(db, this.recurringIncomeCollection, recurringIncomeId);
-      await updateDoc(recurringIncomeRef, {
-        ...updates,
-        updatedAt: Timestamp.now()
-      });
-
-      // Update recurring income in account's array
       const accountRef = doc(db, this.collection, accountId);
       const accountDoc = await getDoc(accountRef);
       const account = accountDoc.data() as Account;
-      
-      if (account.recurringIncomes) {
-        const updatedRecurringIncomes = account.recurringIncomes.map(income => 
-          income.id === recurringIncomeId 
-            ? { ...income, ...updates, updatedAt: Timestamp.now() }
-            : income
-        );
 
-        await updateDoc(accountRef, {
-          recurringIncomes: updatedRecurringIncomes
-        });
+      if (!account.recurringIncomes) {
+        throw new Error('No recurring incomes found');
       }
+
+      // Find and update the specific recurring income
+      const updatedRecurringIncomes = account.recurringIncomes.map(income => {
+        if (income.id === recurringIncomeId) {
+          return {
+            ...income,
+            ...updates,
+            updatedAt: Timestamp.now()
+          };
+        }
+        return income;
+      });
+
+      // Update the account with the modified recurring incomes array
+      await updateDoc(accountRef, {
+        recurringIncomes: updatedRecurringIncomes,
+        updatedAt: Timestamp.now()
+      });
     } catch (error) {
       console.error('Error updating recurring income:', error);
       throw error;
@@ -159,24 +151,24 @@ export class AccountService {
         throw new Error('User not authenticated');
       }
 
-      // Delete recurring income document
-      const recurringIncomeRef = doc(db, this.recurringIncomeCollection, recurringIncomeId);
-      await deleteDoc(recurringIncomeRef);
-
-      // Remove recurring income from account's array
       const accountRef = doc(db, this.collection, accountId);
       const accountDoc = await getDoc(accountRef);
       const account = accountDoc.data() as Account;
-      
-      if (account.recurringIncomes) {
-        const updatedRecurringIncomes = account.recurringIncomes.filter(
-          income => income.id !== recurringIncomeId
-        );
 
-        await updateDoc(accountRef, {
-          recurringIncomes: updatedRecurringIncomes
-        });
+      if (!account.recurringIncomes) {
+        throw new Error('No recurring incomes found');
       }
+
+      // Filter out the recurring income to be deleted
+      const updatedRecurringIncomes = account.recurringIncomes.filter(
+        income => income.id !== recurringIncomeId
+      );
+
+      // Update the account with the filtered recurring incomes array
+      await updateDoc(accountRef, {
+        recurringIncomes: updatedRecurringIncomes,
+        updatedAt: Timestamp.now()
+      });
     } catch (error) {
       console.error('Error deleting recurring income:', error);
       throw error;
@@ -190,17 +182,11 @@ export class AccountService {
         throw new Error('User not authenticated');
       }
 
-      const q = query(
-        collection(db, this.recurringIncomeCollection),
-        where('accountId', '==', accountId),
-        where('userId', '==', userId)
-      );
+      const accountRef = doc(db, this.collection, accountId);
+      const accountDoc = await getDoc(accountRef);
+      const account = accountDoc.data() as Account;
 
-      const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as RecurringIncome[];
+      return account.recurringIncomes || [];
     } catch (error) {
       console.error('Error fetching account recurring incomes:', error);
       throw error;
@@ -258,23 +244,42 @@ export class AccountService {
         throw new Error('User not authenticated');
       }
 
-      // Get the recurring income
-      const recurringIncomeRef = doc(db, this.recurringIncomeCollection, recurringIncomeId);
-      const recurringIncomeDoc = await getDoc(recurringIncomeRef);
-      if (!recurringIncomeDoc.exists()) {
+      // Get all user accounts
+      const accountsQuery = query(
+        collection(db, this.collection),
+        where('userId', '==', userId)
+      );
+      const accountsSnapshot = await getDocs(accountsQuery);
+
+      // Find the account containing this recurring income
+      let targetAccount: Account | null = null;
+      let targetRecurringIncome: RecurringIncome | null = null;
+
+      for (const accountDoc of accountsSnapshot.docs) {
+        const account = accountDoc.data() as Account;
+        if (account.recurringIncomes) {
+          const recurringIncome = account.recurringIncomes.find(ri => ri.id === recurringIncomeId);
+          if (recurringIncome) {
+            targetAccount = { ...account, id: accountDoc.id };
+            targetRecurringIncome = recurringIncome;
+            break;
+          }
+        }
+      }
+
+      if (!targetAccount || !targetRecurringIncome) {
         throw new Error('Recurring income not found');
       }
 
-      const recurringIncome = recurringIncomeDoc.data() as RecurringIncome;
       const batch = writeBatch(db);
 
       // Create transaction for the recurring income
       const transactionRef = doc(collection(db, 'transactions'));
       const transactionData = {
         userId,
-        amount: recurringIncome.amount,
-        description: `${recurringIncome.description} (Recurring)`,
-        accountId: recurringIncome.accountId,
+        amount: targetRecurringIncome.amount,
+        description: `${targetRecurringIncome.description} (Recurring)`,
+        accountId: targetAccount.id,
         categoryId: '', // You might want to create a special income category
         date: serverTimestamp(),
         transactionType: 'income',
@@ -284,9 +289,8 @@ export class AccountService {
       batch.set(transactionRef, transactionData);
 
       // Update account balance
-      const accountRef = doc(db, this.collection, recurringIncome.accountId);
-      batch.update(accountRef, {
-        balance: increment(recurringIncome.amount),
+      batch.update(doc(db, this.collection, targetAccount.id), {
+        balance: increment(targetRecurringIncome.amount),
         updatedAt: serverTimestamp()
       });
 
@@ -294,7 +298,7 @@ export class AccountService {
       const currentDate = new Date();
       let nextDate = new Date(currentDate);
 
-      switch (recurringIncome.recurrenceType) {
+      switch (targetRecurringIncome.recurrenceType) {
         case 'daily':
           nextDate.setDate(currentDate.getDate() + 1);
           break;
@@ -308,13 +312,24 @@ export class AccountService {
           nextDate.setMonth(currentDate.getMonth() + 1);
           break;
         case 'custom':
-          nextDate.setMonth(currentDate.getMonth() + (recurringIncome.recurrenceInterval || 1));
+          nextDate.setMonth(currentDate.getMonth() + (targetRecurringIncome.recurrenceInterval || 1));
           break;
       }
 
       // Update the recurring income with new next recurrence date
-      batch.update(recurringIncomeRef, {
-        nextRecurrenceDate: Timestamp.fromDate(nextDate),
+      const updatedRecurringIncomes = targetAccount.recurringIncomes!.map(income => {
+        if (income.id === recurringIncomeId) {
+          return {
+            ...income,
+            nextRecurrenceDate: Timestamp.fromDate(nextDate),
+            updatedAt: Timestamp.now()
+          };
+        }
+        return income;
+      });
+
+      batch.update(doc(db, this.collection, targetAccount.id), {
+        recurringIncomes: updatedRecurringIncomes,
         updatedAt: serverTimestamp()
       });
 
@@ -335,32 +350,34 @@ export class AccountService {
       const now = new Date();
       const currentTimestamp = Timestamp.fromDate(now);
       
-      // Query for all recurring incomes that are due (nextRecurrenceDate <= now)
-      const q = query(
-        collection(db, this.recurringIncomeCollection),
-        where('userId', '==', userId),
-        where('nextRecurrenceDate', '<=', currentTimestamp)
+      // Query for all accounts with due recurring incomes
+      const accountsQuery = query(
+        collection(db, this.collection),
+        where('userId', '==', userId)
       );
       
-      const querySnapshot = await getDocs(q);
-      console.log(`Found ${querySnapshot.docs.length} recurring incomes due for processing`);
+      const accountsSnapshot = await getDocs(accountsQuery);
+      console.log(`Found ${accountsSnapshot.docs.length} accounts to check for due recurring incomes`);
       
       let processed = 0;
       let errors = 0;
       
-      // Process each due recurring income
-      for (const doc of querySnapshot.docs) {
-        try {
-          const recurringIncome = { id: doc.id, ...doc.data() } as RecurringIncome;
-          
-          // Use the existing processRecurringIncome method to handle the income
-          await this.processRecurringIncome(recurringIncome.id);
-          processed++;
-          
-          console.log(`Successfully processed recurring income ${recurringIncome.id} for account ${recurringIncome.accountId}`);
-        } catch (error) {
-          console.error(`Error processing recurring income ${doc.id}:`, error);
-          errors++;
+      // Process each account's recurring incomes
+      for (const accountDoc of accountsSnapshot.docs) {
+        const account = accountDoc.data() as Account;
+        if (!account.recurringIncomes) continue;
+
+        for (const recurringIncome of account.recurringIncomes) {
+          if (recurringIncome.nextRecurrenceDate.toDate() <= now) {
+            try {
+              await this.processRecurringIncome(recurringIncome.id);
+              processed++;
+              console.log(`Successfully processed recurring income ${recurringIncome.id} for account ${account.id}`);
+            } catch (error) {
+              console.error(`Error processing recurring income ${recurringIncome.id}:`, error);
+              errors++;
+            }
+          }
         }
       }
       

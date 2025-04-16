@@ -446,7 +446,7 @@ const Budgets = () => {
         await CategoryService.createMainCategory({
           name: newMainCategoryName,
           icon: newMainCategoryIcon,
-          userId,
+          userIds: [userId],
           order: mainCategories.length
         });
         Toast.show({
@@ -1085,7 +1085,11 @@ const Budgets = () => {
                                           style: 'destructive',
                                           onPress: async () => {
                                             try {
-                                              await CategoryService.deleteMainCategory(category.id);
+                                              const userId = auth.currentUser?.uid;
+                                              if (!userId) {
+                                                throw new Error('User not authenticated');
+                                              }
+                                              await CategoryService.deleteMainCategory(category.id, userId);
                                               Toast.show({
                                                 type: 'success',
                                                 text1: 'Success',

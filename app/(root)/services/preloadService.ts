@@ -5,6 +5,8 @@ import { CategoryService } from './categoryService';
 import { Timestamp } from 'firebase/firestore';
 import { Transaction, DailyAggregation } from '../firebase/types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AccountService } from './accountService';
+import { BudgetService } from './budgetService';
 
 // Define a structure to store preloaded data
 interface PreloadedData {
@@ -108,6 +110,56 @@ class PreloadServiceClass {
     }
 
     return { currentStart, currentEnd, previousStart, previousEnd };
+  }
+
+  /**
+   * Initialize preloading for all timeframes
+   */
+  async initializePreloading(userId: string): Promise<void> {
+    try {
+      console.log('[PreloadService] Starting initialization...');
+      
+      // Process recurring payments first
+      console.log('[PreloadService] Processing recurring payments...');
+      const recurringResult = await AccountService.processAllDueRecurringIncomes(userId);
+      if (recurringResult.processed > 0) {
+        console.log(`[PreloadService] Processed ${recurringResult.processed} recurring payments`);
+      }
+      if (recurringResult.errors > 0) {
+        console.error(`[PreloadService] Failed to process ${recurringResult.errors} recurring payments`);
+      }
+
+      // Process recurring budgets
+      console.log('[PreloadService] Processing recurring budgets...');
+      await BudgetService.processRecurringBudgets();
+
+      // Preload categories and main categories
+      console.log('[PreloadService] Preloading categories...');
+      await this.preloadCategories(userId);
+      
+      // Preload transactions for all timeframes
+      console.log('[PreloadService] Preloading transactions...');
+      await Promise.all([
+        this.preloadTransactions(userId, 'week'),
+        this.preloadTransactions(userId, 'month'),
+        this.preloadTransactions(userId, '6months'),
+        this.preloadTransactions(userId, 'year')
+      ]);
+      
+      // Preload aggregations
+      console.log('[PreloadService] Preloading aggregations...');
+      await Promise.all([
+        this.preloadAggregations(userId, 'week'),
+        this.preloadAggregations(userId, 'month'),
+        this.preloadAggregations(userId, '6months'),
+        this.preloadAggregations(userId, 'year')
+      ]);
+      
+      console.log('[PreloadService] Initialization complete');
+    } catch (error) {
+      console.error('[PreloadService] Error during initialization:', error);
+      throw error;
+    }
   }
 
   /**
@@ -296,18 +348,20 @@ class PreloadServiceClass {
         CategoryService.getUserMainCategories(userId)
       ]);
       
+      // Validate categories
+      if (!categories || !mainCategories || categories.length === 0 || mainCategories.length === 0) {
+        console.error('[PreloadService] Warning: Empty categories or main categories fetched');
+        throw new Error('Failed to fetch valid categories');
+      }
+      
       console.log('[PreloadService] Fetched categories and main categories:', {
         categoriesCount: categories.length,
         mainCategoriesCount: mainCategories.length,
-        categoryIds: categories.map(c => c.id).slice(0, 5), // Log first 5 category IDs
-        mainCategoryIds: mainCategories.map(c => c.id).slice(0, 5) // Log first 5 main category IDs
+        categoryIds: categories.map(c => c.id).slice(0, 5),
+        mainCategoryIds: mainCategories.map(c => c.id).slice(0, 5)
       });
       
-      if (!categories.length || !mainCategories.length) {
-        console.error('[PreloadService] Warning: Empty categories or main categories fetched');
-      }
-      
-      // Store in cache - keep the original object structure to ensure types match when retrieved
+      // Store in cache
       this.preloadedData.categories = {
         data: categories,
         timestamp: now
@@ -332,6 +386,10 @@ class PreloadServiceClass {
       console.log(`[PreloadService] Preloaded ${categories.length} categories and ${mainCategories.length} main categories`);
     } catch (error) {
       console.error('[PreloadService] Error preloading categories:', error);
+      // Clear invalid cache
+      this.preloadedData.categories = { data: [], timestamp: 0 };
+      this.preloadedData.mainCategories = { data: [], timestamp: 0 };
+      throw error;
     }
   }
   

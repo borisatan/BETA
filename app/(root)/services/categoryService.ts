@@ -1,7 +1,7 @@
 import { db } from '../firebase/firebaseConfig';
 import { collection, doc, addDoc, updateDoc, deleteDoc, getDocs, query, where, getDoc, writeBatch, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { auth } from '../firebase/firebaseConfig';
-import { Category, Subcategory } from '../firebase/types';
+import { Category, Subcategory, MainCategory } from '../firebase/types';
 
 const defaultCategories = [
   { name: 'Needs', icon: 'priority-high', order: 0 },
@@ -36,7 +36,7 @@ export class CategoryService {
   static async getUserCategories(userId: string): Promise<Category[]> {
     try {
       const categoriesRef = collection(db, 'categories');
-      const q = query(categoriesRef, where('userId', '==', userId));
+      const q = query(categoriesRef, where('userIds', 'array-contains', userId));
       const querySnapshot = await getDocs(q);
       
       const categories = querySnapshot.docs.map(doc => ({
@@ -47,33 +47,18 @@ export class CategoryService {
       })) as Category[];
 
       if (categories.length === 0) {
-        const defaultCategoriesWithUserId = defaultCategories.map(category => ({
-          ...category,
-          userId,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        }));
-
-        const batch = writeBatch(db);
-        const createdCategories: Category[] = [];
-
-        for (const category of defaultCategoriesWithUserId) {
-          const docRef = doc(collection(db, 'categories'));
-          batch.set(docRef, category);
-          // We'll fetch these categories after the batch commit to get the actual timestamps
-          createdCategories.push({
-            id: docRef.id,
-            ...category,
-            createdAt: Timestamp.now(),
-            updatedAt: Timestamp.now()
-          } as Category);
+        // Create default categories
+        for (const defaultCategory of defaultCategories) {
+          await this.findOrCreateCategory({
+            ...defaultCategory,
+            mainCategory: defaultCategory.name, // For main categories like Needs, Wants, set mainCategory = name
+            userIds: [userId]
+          });
         }
-
-        await batch.commit();
         
-        // Fetch the newly created categories to get the actual server timestamps
+        // Fetch the newly created categories
         const newCategoriesRef = collection(db, 'categories');
-        const newQ = query(newCategoriesRef, where('userId', '==', userId));
+        const newQ = query(newCategoriesRef, where('userIds', 'array-contains', userId));
         const newQuerySnapshot = await getDocs(newQ);
         
         return newQuerySnapshot.docs.map(doc => ({
@@ -91,21 +76,53 @@ export class CategoryService {
     }
   }
 
-  static async createCategory(category: Omit<Category, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
+  static async findOrCreateCategory(category: Omit<Category, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
     try {
+      // Check if a category with the same name and icon already exists
+      const categoriesRef = collection(db, 'categories');
+      const q = query(
+        categoriesRef, 
+        where('name', '==', category.name),
+        where('icon', '==', category.icon)
+      );
+      const querySnapshot = await getDocs(q);
+      
+      // If category exists, add userId to the userIds array if not already included
+      if (!querySnapshot.empty) {
+        const existingCategory = querySnapshot.docs[0];
+        const categoryData = existingCategory.data();
+        const userId = category.userIds[0]; // Assuming we're adding one user at a time
+        
+        // Check if user already has this category
+        if (!categoryData.userIds.includes(userId)) {
+          await updateDoc(existingCategory.ref, {
+            userIds: [...categoryData.userIds, userId],
+            updatedAt: serverTimestamp()
+          });
+        }
+        
+        return existingCategory.id;
+      }
+      
+      // If category doesn't exist, create a new one
       const docRef = await addDoc(collection(db, 'categories'), {
         ...category,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
+      
       return docRef.id;
     } catch (error) {
-      console.error('Error creating category:', error);
+      console.error('Error finding or creating category:', error);
       throw error;
     }
   }
 
-  static async updateCategory(categoryId: string, updates: Partial<Category>): Promise<void> {
+  static async createCategory(category: Omit<Category, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
+    return this.findOrCreateCategory(category);
+  }
+
+  static async updateCategory(categoryId: string, updates: Partial<Omit<Category, 'userIds'>>): Promise<void> {
     try {
       const categoryRef = doc(db, 'categories', categoryId);
       await updateDoc(categoryRef, {
@@ -118,23 +135,47 @@ export class CategoryService {
     }
   }
 
-  static async deleteCategory(categoryId: string): Promise<void> {
+  static async removeUserFromCategory(categoryId: string, userId: string): Promise<void> {
     try {
-      // First, delete all subcategories under this category
-      const subcategories = await this.getSubcategoriesByCategory(categoryId);
-      const batch = writeBatch(db);
+      const categoryRef = doc(db, 'categories', categoryId);
+      const categoryDoc = await getDoc(categoryRef);
+      
+      if (categoryDoc.exists()) {
+        const categoryData = categoryDoc.data();
+        const userIds = categoryData.userIds || [];
+        
+        // If this is the only user, delete the category
+        if (userIds.length === 1 && userIds[0] === userId) {
+          // First, delete all subcategories under this category
+          const subcategories = await this.getSubcategoriesByCategory(categoryId);
+          const batch = writeBatch(db);
 
-      for (const subcategory of subcategories) {
-        batch.delete(doc(db, 'subcategories', subcategory.id));
+          for (const subcategory of subcategories) {
+            if (subcategory.userId === userId) {
+              batch.delete(doc(db, 'subcategories', subcategory.id));
+            }
+          }
+
+          // Then delete the category
+          batch.delete(categoryRef);
+          await batch.commit();
+        } else {
+          // Otherwise, just remove the user from the userIds array
+          const updatedUserIds = userIds.filter((id: string) => id !== userId);
+          await updateDoc(categoryRef, {
+            userIds: updatedUserIds,
+            updatedAt: serverTimestamp()
+          });
+        }
       }
-
-      // Then delete the category
-      batch.delete(doc(db, 'categories', categoryId));
-      await batch.commit();
     } catch (error) {
-      console.error('Error deleting category:', error);
+      console.error('Error removing user from category:', error);
       throw error;
     }
+  }
+
+  static async deleteCategory(categoryId: string, userId: string): Promise<void> {
+    await this.removeUserFromCategory(categoryId, userId);
   }
 
   static async getCategory(categoryId: string): Promise<Category | null> {
@@ -315,5 +356,137 @@ export class CategoryService {
       console.error('Error fetching subcategory:', error);
       throw error;
     }
+  }
+
+  static async getUserMainCategories(userId: string): Promise<MainCategory[]> {
+    try {
+      const mainCategoriesRef = collection(db, 'mainCategories');
+      const q = query(mainCategoriesRef, where('userIds', 'array-contains', userId));
+      const querySnapshot = await getDocs(q);
+      
+      const mainCategories = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt as Timestamp,
+        updatedAt: doc.data().updatedAt as Timestamp
+      })) as MainCategory[];
+
+      if (mainCategories.length === 0) {
+        // Create default main categories
+        for (const defaultCategory of defaultCategories) {
+          await this.findOrCreateMainCategory({
+            ...defaultCategory,
+            userIds: [userId]
+          });
+        }
+        
+        // Fetch the newly created main categories
+        const newMainCategoriesRef = collection(db, 'mainCategories');
+        const newQ = query(newMainCategoriesRef, where('userIds', 'array-contains', userId));
+        const newQuerySnapshot = await getDocs(newQ);
+        
+        return newQuerySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+          createdAt: doc.data().createdAt as Timestamp,
+          updatedAt: doc.data().updatedAt as Timestamp
+        })) as MainCategory[];
+      }
+
+      return mainCategories.sort((a, b) => a.order - b.order);
+    } catch (error) {
+      console.error('Error fetching main categories:', error);
+      throw error;
+    }
+  }
+
+  static async findOrCreateMainCategory(category: Omit<MainCategory, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
+    try {
+      // Check if a main category with the same name and icon already exists
+      const mainCategoriesRef = collection(db, 'mainCategories');
+      const q = query(
+        mainCategoriesRef, 
+        where('name', '==', category.name),
+        where('icon', '==', category.icon)
+      );
+      const querySnapshot = await getDocs(q);
+      
+      // If main category exists, add userId to the userIds array if not already included
+      if (!querySnapshot.empty) {
+        const existingCategory = querySnapshot.docs[0];
+        const categoryData = existingCategory.data();
+        const userId = category.userIds[0]; // Assuming we're adding one user at a time
+        
+        // Check if user already has this main category
+        if (!categoryData.userIds.includes(userId)) {
+          await updateDoc(existingCategory.ref, {
+            userIds: [...categoryData.userIds, userId],
+            updatedAt: serverTimestamp()
+          });
+        }
+        
+        return existingCategory.id;
+      }
+      
+      // If main category doesn't exist, create a new one
+      const docRef = await addDoc(collection(db, 'mainCategories'), {
+        ...category,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      
+      return docRef.id;
+    } catch (error) {
+      console.error('Error finding or creating main category:', error);
+      throw error;
+    }
+  }
+
+  static async createMainCategory(category: Omit<MainCategory, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
+    return this.findOrCreateMainCategory(category);
+  }
+
+  static async updateMainCategory(categoryId: string, updates: Partial<Omit<MainCategory, 'userIds'>>): Promise<void> {
+    try {
+      const categoryRef = doc(db, 'mainCategories', categoryId);
+      await updateDoc(categoryRef, {
+        ...updates,
+        updatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      console.error('Error updating main category:', error);
+      throw error;
+    }
+  }
+
+  static async removeUserFromMainCategory(categoryId: string, userId: string): Promise<void> {
+    try {
+      const categoryRef = doc(db, 'mainCategories', categoryId);
+      const categoryDoc = await getDoc(categoryRef);
+      
+      if (categoryDoc.exists()) {
+        const categoryData = categoryDoc.data();
+        const userIds = categoryData.userIds || [];
+        
+        // If this is the only user, delete the category
+        if (userIds.length === 1 && userIds[0] === userId) {
+          await deleteDoc(categoryRef);
+        } else {
+          // Otherwise, just remove the user from the userIds array
+          const updatedUserIds = userIds.filter((id: string) => id !== userId);
+          await updateDoc(categoryRef, {
+            userIds: updatedUserIds,
+            updatedAt: serverTimestamp()
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error removing user from main category:', error);
+      throw error;
+    }
+  }
+
+  static async deleteMainCategory(categoryId: string, userId: string): Promise<void> {
+    await this.removeUserFromMainCategory(categoryId, userId);
   }
 } 

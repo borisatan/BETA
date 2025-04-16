@@ -18,6 +18,7 @@ export default function Index() {
       <Link href="/budgets" className="my-4">Budget</Link>
       <Link href="/transaction-adder" className="my-4">Add Transaction</Link>
       <Link href="/fix-transactions" className="my-4">Fix Transactions</Link>
+      <Link href="/migrate-categories" className="my-4">Migrate Categories</Link>
       <Link href="sign-in" className="my-4">Sign In</Link>
       <Link href="sign-up" className="my-4">Sign Up</Link>
     </View>

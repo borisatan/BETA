@@ -32,19 +32,28 @@ export interface Transaction extends Timestamps {
 
 export interface Category extends Timestamps {
   id: string;
-  userId: string;
   name: string;
   icon: string;
   order: number;
+  userIds: string[];
+  mainCategory: string;
+}
+
+export interface MainCategory extends Timestamps {
+  id: string;
+  name: string;
+  icon: string;
+  order: number;
+  userIds: string[];
 }
 
 export interface Subcategory extends Timestamps {
   id: string;
-  userId: string;
   name: string;
-  categoryId: string;  // Reference to main category
+  categoryId: string;
   icon: string;
-  order?: number;
+  order: number;
+  userId: string;
 }
 
 export interface Income extends Timestamps {

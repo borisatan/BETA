@@ -318,7 +318,7 @@ const Accounts = () => {
     }
   };
 
-  const handleAddIncome = async () => {
+  const handleAddRecurringIncome = async () => {
     try {
       if (!selectedAccount || !incomeAmount) {
         Toast.show({
@@ -343,36 +343,21 @@ const Accounts = () => {
         return;
       }
 
-      if (isRecurringIncome) {
-        // Add recurring income
-        await AccountService.addRecurringIncome(selectedAccount.id, {
-          amount: cleanAmount,
-          description: incomeDescription || 'Recurring Income',
-          recurrenceType: incomeRecurrenceType,
-          recurrenceInterval: parseInt(incomeRecurrenceInterval),
-          nextRecurrenceDate: Timestamp.fromDate(new Date())
-        });
+      // Add recurring income
+      await AccountService.addRecurringIncome(selectedAccount.id, {
+        amount: cleanAmount,
+        description: incomeDescription || 'Recurring Income',
+        recurrenceType: incomeRecurrenceType,
+        recurrenceInterval: parseInt(incomeRecurrenceInterval),
+        nextRecurrenceDate: Timestamp.fromDate(new Date())
+      });
 
-        Toast.show({
-          type: 'success',
-          text1: 'Success',
-          text2: 'Recurring income added successfully',
-          position: 'bottom'
-        });
-      } else {
-        // Add one-time income
-        await AccountService.addIncome(selectedAccount.id, {
-          amount: cleanAmount,
-          description: incomeDescription || 'Income'
-        });
-
-        Toast.show({
-          type: 'success',
-          text1: 'Success',
-          text2: 'Income added successfully',
-          position: 'bottom'
-        });
-      }
+      Toast.show({
+        type: 'success',
+        text1: 'Success',
+        text2: 'Recurring income added successfully',
+        position: 'bottom'
+      });
 
       // Reset form and close modal
       setIncomeAmount('');
@@ -384,14 +369,17 @@ const Accounts = () => {
       setShowIncomeModal(false);
       setSelectedAccount(null);
 
-      // Refresh accounts
+      // Refresh accounts and recurring incomes
       fetchAccounts();
+      if (selectedAccount) {
+        fetchRecurringIncomes(selectedAccount.id);
+      }
     } catch (error) {
-      console.error('Error adding income:', error);
+      console.error('Error adding recurring income:', error);
       Toast.show({
         type: 'error',
         text1: 'Error',
-        text2: 'Failed to add income',
+        text2: error instanceof Error ? error.message : 'Failed to add recurring income',
         position: 'bottom'
       });
     }
@@ -499,7 +487,7 @@ const Accounts = () => {
       Toast.show({
         type: 'error',
         text1: 'Error',
-        text2: 'Failed to update recurring income',
+        text2: error instanceof Error ? error.message : 'Failed to update recurring income',
         position: 'bottom'
       });
     }
@@ -511,6 +499,12 @@ const Accounts = () => {
       setRecurringIncomes(incomes);
     } catch (error) {
       console.error('Error fetching recurring incomes:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Failed to fetch recurring incomes',
+        position: 'bottom'
+      });
     }
   };
 
@@ -1413,7 +1407,7 @@ const Accounts = () => {
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                onPress={handleAddIncome}
+                onPress={handleAddRecurringIncome}
                 className={`flex-1 ml-2 p-4 rounded-lg ${
                   isDarkMode ? "bg-[#1E40AF]" : "bg-[#1E3A8A]"
                 }`}

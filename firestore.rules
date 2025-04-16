@@ -13,17 +13,55 @@ service cloud.firestore {
     }
     
     match /categories/{categoryId} {
-      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow update: if request.auth != null && resource.data.userId == request.auth.uid;
-      allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow read: if request.auth != null && (
+        (resource.data.userIds != null && request.auth.uid in resource.data.userIds) ||
+        (resource.data.userId != null && request.auth.uid == resource.data.userId)
+      );
+      allow create: if request.auth != null && (
+        (request.resource.data.userIds != null && request.auth.uid in request.resource.data.userIds) ||
+        (request.resource.data.userId != null && request.auth.uid == request.resource.data.userId)
+      );
+      allow update: if request.auth != null && (
+        (resource.data.userIds != null && request.auth.uid in resource.data.userIds) ||
+        (resource.data.userId != null && request.auth.uid == resource.data.userId) ||
+        // Allow special case: adding current user to existing category
+        (
+          resource.data.userIds != null &&
+          request.resource.data.userIds.hasAll(resource.data.userIds) &&
+          request.resource.data.userIds.size() == resource.data.userIds.size() + 1 &&
+          request.auth.uid in request.resource.data.userIds
+        )
+      );
+      allow delete: if request.auth != null && (
+        (resource.data.userIds != null && request.auth.uid in resource.data.userIds) ||
+        (resource.data.userId != null && request.auth.uid == resource.data.userId)
+      );
     }
     
     match /mainCategories/{mainCategoryId} {
-      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow update: if request.auth != null && resource.data.userId == request.auth.uid;
-      allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow read: if request.auth != null && (
+        (resource.data.userIds != null && request.auth.uid in resource.data.userIds) ||
+        (resource.data.userId != null && request.auth.uid == resource.data.userId)
+      );
+      allow create: if request.auth != null && (
+        (request.resource.data.userIds != null && request.auth.uid in request.resource.data.userIds) ||
+        (request.resource.data.userId != null && request.auth.uid == request.resource.data.userId)
+      );
+      allow update: if request.auth != null && (
+        (resource.data.userIds != null && request.auth.uid in resource.data.userIds) ||
+        (resource.data.userId != null && request.auth.uid == resource.data.userId) ||
+        // Allow special case: adding current user to existing category
+        (
+          resource.data.userIds != null &&
+          request.resource.data.userIds.hasAll(resource.data.userIds) &&
+          request.resource.data.userIds.size() == resource.data.userIds.size() + 1 &&
+          request.auth.uid in request.resource.data.userIds
+        )
+      );
+      allow delete: if request.auth != null && (
+        (resource.data.userIds != null && request.auth.uid in resource.data.userIds) ||
+        (resource.data.userId != null && request.auth.uid == resource.data.userId)
+      );
     }
     
     match /subcategories/{subcategoryId} {
@@ -88,7 +126,8 @@ service cloud.firestore {
           && request.resource.data.netFlow == (request.resource.data.totalIncome - request.resource.data.totalExpenses)
           && request.resource.data.transactionCount >= 0
         );
-      allow update: if isAuthenticated() 
+      
+      allow update: if isAuthenticated()
         && isOwner(resource.data.userId)
         && request.resource.data.userId == resource.data.userId
         && (
@@ -156,20 +195,6 @@ service cloud.firestore {
         )
       );
       allow delete: if isAuthenticated() && isOwner(resource.data.userId);
-    }
-
-    // Categories collection rules
-    match /categories/{categoryId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isAuthenticated() && isOwner(resource.data.userId);
-    }
-
-    // Main Categories collection rules
-    match /mainCategories/{mainCategoryId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isAuthenticated() && isOwner(resource.data.userId);
     }
 
     // Recurring Incomes collection rules
