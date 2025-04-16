@@ -174,19 +174,25 @@ const TransactionAdder = () => {
         type: 'error',
         text1: 'Error',
         text2: 'Please fill in all required fields'
-        });
-        return;
-      }
+      });
+      return;
+    }
 
     try {
+      // Find the selected category object from the categories array
+      const selectedCategoryObj = categories.find(cat => cat.name === selectedCategory);
+      if (!selectedCategoryObj) {
+        throw new Error('Selected category not found');
+      }
+
       const transaction: Omit<Transaction, 'id'> = {
         userId: auth.currentUser?.uid || '',
         amount: parseFloat(amount),
         date: Timestamp.fromDate(date),
         description: notes,
         accountId: selectedAccount,
-        categoryId: selectedCategory,
-        subcategoryId: '',
+        categoryId: selectedCategoryObj.id,  // Use the category's ID
+        subcategoryId: '',  // This will be empty for now since we're not handling subcategories yet
         paymentMethod: '',
         notes: '',
         transactionType: 'expense',
@@ -268,7 +274,7 @@ const TransactionAdder = () => {
                 text2: 'Category deleted successfully'
               });
               fetchCategories();
-      } catch (error) {
+            } catch (error) {
               console.error('Error deleting category:', error);
               Toast.show({
                 type: 'error',

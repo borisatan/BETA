@@ -23,8 +23,8 @@ export interface Transaction extends Timestamps {
   date: Timestamp;
   description: string;
   accountId: string;
-  categoryId: string;
-  subcategoryId: string;
+  categoryId: string;      // Main category ID
+  subcategoryId: string;   // Subcategory ID
   transactionType: 'expense' | 'income' | 'transfer';
   paymentMethod: string;
   notes?: string;
@@ -34,14 +34,17 @@ export interface Category extends Timestamps {
   id: string;
   userId: string;
   name: string;
-  description: string;
+  icon: string;
+  order: number;
 }
 
 export interface Subcategory extends Timestamps {
   id: string;
   userId: string;
   name: string;
-  categoryId: string;
+  categoryId: string;  // Reference to main category
+  icon: string;
+  order?: number;
 }
 
 export interface Income extends Timestamps {
